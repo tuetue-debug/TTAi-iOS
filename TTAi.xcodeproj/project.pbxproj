@@ -45,6 +45,42 @@
 		27E67B992F6FDFC300232824 /* TTAiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TTAiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		27E67B9D2F6FDFC300232824 /* TTAiUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiUITests.swift; sourceTree = "<group>"; };
 		27E67B9F2F6FDFC300232824 /* TTAiUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiUITestsLaunchTests.swift; sourceTree = "<group>"; };
+
+		0000000000000000B1A0E60349744D5896FDD6A06046EE28 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\ContentView.swift"; sourceTree = "<group>"; };
+
+		00000000000000004B5CF55E20834A07B19CFEE14B88FBA2 /* TTAiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiApp.swift"; sourceTree = "<group>"; };
+
+		0000000000000000652316DFD7994F39945F87D5642071CE /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\App\MainTabView.swift"; sourceTree = "<group>"; };
+
+		00000000000000009DB9C99E90A541F59477C563501EC8FB /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\App\SplashScreen.swift"; sourceTree = "<group>"; };
+
+		00000000000000005BE82C38AB46442A9D49225241C036C7 /* APIClient+Mock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\API\APIClient+Mock.swift"; sourceTree = "<group>"; };
+
+		00000000000000003E21046EF55447C9A4B40A6953A5621D /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\API\APIClient.swift"; sourceTree = "<group>"; };
+
+		0000000000000000C7307C5EADD4485398499FF04B3EDEEA /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\API\NetworkMonitor.swift"; sourceTree = "<group>"; };
+
+		0000000000000000BFB8311FEC604CE9A6B439C62B23A244 /* AIModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Models\AIModel.swift"; sourceTree = "<group>"; };
+
+		000000000000000019DE3D07957240688C05EC45680BD9EC /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Models\ChatMessage.swift"; sourceTree = "<group>"; };
+
+		0000000000000000B12DC8465FBA4626BBA7B0A78B447DCF /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Utils\Extensions.swift"; sourceTree = "<group>"; };
+
+		0000000000000000F015B6C48C174C76AC6AC8076AAE5CBB /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Utils\MockData.swift"; sourceTree = "<group>"; };
+
+		0000000000000000FD4F194C4ABD40A78F85960466B3A354 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\Chat\ChatView.swift"; sourceTree = "<group>"; };
+
+		000000000000000062A92E578BD949FA8AC4B8EAE9E94C43 /* CodeGeneratorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\CodeGenerator\CodeGeneratorView.swift"; sourceTree = "<group>"; };
+
+		00000000000000005B6BCA866A1E499DAD70F99E59A19FE4 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\History\HistoryView.swift"; sourceTree = "<group>"; };
+
+		0000000000000000F135A6600F994BE5ADB0957CD668EFEE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\Settings\SettingsView.swift"; sourceTree = "<group>"; };
+
+		0000000000000000221A4593F9EA4887B3DC25BED76B6A36 /* TTAiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiTests\TTAiTests.swift"; sourceTree = "<group>"; };
+
+		00000000000000008034EA9767A74F3CB78BF80ED2D7A199 /* TTAiUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiUITests\TTAiUITests.swift"; sourceTree = "<group>"; };
+
+		0000000000000000CE6FC7D0EC86422C86FAB42C9A8340B4 /* TTAiUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiUITests\TTAiUITestsLaunchTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
