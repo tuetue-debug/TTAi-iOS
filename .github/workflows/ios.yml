@@ -22,22 +22,13 @@ jobs:
         pwd
         echo "Listing contents:"
         ls -la
-        if [ -d "TTAi" ]; then
-          cd TTAi
-          echo "Inside TTAi directory:"
-          ls -la
-          echo "Listing available schemes..."
-          xcodebuild -list || true
-          echo "Building..."
-          xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build
-        else
-          echo "TTAi directory not found."
-          find . -name "*.xcodeproj" -o -name "*.xcworkspace"
-        fi
+        echo "Looking for Xcode project..."
+        find . -name "*.xcodeproj" -o -name "*.xcworkspace"
+        echo "Building from current directory..."
+        xcodebuild -list || true
+        echo "Building..."
+        xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build
     
     - name: Run Tests
       run: |
-        if [ -d "TTAi" ]; then
-          cd TTAi
-          xcodebuild test -scheme TTAi -destination 'generic/platform=iOS Simulator' || echo "Tests may fail if no tests exist"
-        fi
+        xcodebuild test -scheme TTAi -destination 'generic/platform=iOS Simulator' || echo "Tests may fail if no tests exist"
