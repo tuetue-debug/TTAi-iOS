@@ -27,7 +27,7 @@ jobs:
         echo "Building from current directory..."
         xcodebuild -list || true
         echo "Building..."
-        xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build
+        xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
     
     - name: Run Tests
       run: |
