@@ -15,6 +15,7 @@
 /* Begin PBXFileReference section */
 		27E67B7E2F6FDFBF00232824 /* TTAi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TTAi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		27E67B812F6FDFBF00232824 /* TTAiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiApp.swift; sourceTree = "<group>"; };
+		27E67B832F6FDFBF00232824 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		27E67B852F6FDFC200232824 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		27E67B872F6FDFC200232824 /* TTAi.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TTAi.entitlements; sourceTree = "<group>"; };
 		27E67B892F6FDFC200232824 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -51,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				27E67B812F6FDFBF00232824 /* TTAiApp.swift */,
+				27E67B832F6FDFBF00232824 /* Info.plist */,
 				27E67B852F6FDFC200232824 /* Assets.xcassets */,
 				27E67B872F6FDFC200232824 /* TTAi.entitlements */,
 				27E67B882F6FDFC200232824 /* Preview Content */,
