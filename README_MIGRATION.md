@@ -1,24 +1,25 @@
 # TTAi-Xcode Migration Notes (2026-03-22)
 
-C·c thu m?c sau d„ du?c copy v‡o G:\Shared drives\tuetue\TTAi-Xcode\TTAi\TTAi:
+C√°c thu m?c sau d√£ du?c copy v√†o G:\Shared drives\tuetue\TTAi-Xcode\TTAi\TTAi:
 
 - App/
 - Core/
 - Features/
 - Resources/ (bao g?m Assets.xcassets, AppIcon placeholder)
 
-## Vi?c b?n c?n l‡m trong Xcode (khi quay l?i Mac)
+## Vi?c b?n c?n l√†m trong Xcode (khi quay l?i Mac)
 1. M? TTAi-Xcode/TTAi/TTAi.xcodeproj.
-2. Trong Project Navigator, t?o c·c group tuong ?ng (App, Core, Features, Resources).
-3. Chu?t ph?i m?i group ? **Add Files to "TTAi"Ö** ? tr? v‡o thu m?c c˘ng tÍn trong TTAi/TTAi/ ? nh? tick "Create groups" v‡ target TTAi.
-4. V?i Resources, sau khi thÍm Assets.xcassets/AppIcon m?i, xÛa asset template cu n?u cÚn.
-5. XÛa ContentView.swift v‡ Preview Content n?u Xcode v?n li?t kÍ (mÏnh d„ xÛa file v?t l˝).
-6. –?m b?o TTAiApp.swift dang d˘ng file t? thu m?c App (mÏnh d„ copy dË s?n).
+2. Trong Project Navigator, t?o c√°c group tuong ?ng (App, Core, Features, Resources).
+3. Chu?t ph?i m?i group ? **Add Files to "TTAi"‚Ä¶** ? tr? v√†o thu m?c c√πng t√™n trong TTAi/TTAi/ ? nh? tick "Create groups" v√† target TTAi.
+4. V?i Resources, sau khi th√™m Assets.xcassets/AppIcon m?i, x√≥a asset template cu n?u c√≤n.
+5. X√≥a ContentView.swift v√† Preview Content n?u Xcode v?n li?t k√™ (m√¨nh d√£ x√≥a file v?t l√Ω).
+6. √ê?m b?o TTAiApp.swift dang d√πng file t? thu m?c App (m√¨nh d√£ copy d√® s?n).
 7. Clean build (Shift+?+K) r?i ch?y simulator (?R).
 
-## Ghi ch˙ kh·c
+## Ghi ch√∫ kh√°c
 - B? AppIcon placeholder: Resources/AppIcon.appiconset.
-- N?u c?n test target, b?n cÛ th? kÈo thu m?c Tests/ t? repo cu v‡o group TTAiTests.
-- C·c scripts/branding/docs v?n n?m trong G:\Shared drives\tuetue\Tests\TTAiTests\TTAi-iOS d? tham chi?u.
+- N?u c?n test target, b?n c√≥ th? k√©o thu m?c Tests/ t? repo cu v√†o group TTAiTests.
+- C√°c scripts/branding/docs v?n n?m trong G:\Shared drives\tuetue\Tests\TTAiTests\TTAi-iOS d? tham chi?u.
+- ![iOS CI](https://github.com/tuetue-debug/TTAi-iOS/actions/workflows/ios.yml/badge.svg)
 
-C?n mÏnh b? sung file n‡o n?a c? nh?n nhÈ!
+C?n m√¨nh b? sung file n√†o n?a c? nh?n nh√©!
