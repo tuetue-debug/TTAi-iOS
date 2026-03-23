@@ -26,13 +26,15 @@ jobs:
         find . -name "*.xcodeproj" -o -name "*.xcworkspace"
         echo "Building from current directory..."
         xcodebuild -list || true
-        echo "Building..."
-        xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build \
+        echo "Building minimal project..."
+        xcodebuild -project TTAi.xcodeproj -scheme TTAi -destination 'generic/platform=iOS Simulator' build \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_ENTITLEMENTS="" \
-          PROVISIONING_PROFILE=""
+          PROVISIONING_PROFILE="" \
+          DEVELOPMENT_TEAM="" \
+          INFOPLIST_FILE=""
     
     - name: Run Tests
       run: |
