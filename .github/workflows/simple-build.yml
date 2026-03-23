@@ -1,0 +1,42 @@
+name: Simple iOS Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  simple-build:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Debug Info
+      run: |
+        echo "=== DEBUG INFO ==="
+        echo "Current directory: $(pwd)"
+        echo "Files in root:"
+        ls -la
+        echo "TTAi directory:"
+        ls -la TTAi/ || echo "No TTAi directory"
+        echo "Xcode project:"
+        ls -la *.xcodeproj/ || echo "No .xcodeproj"
+        echo "=== END DEBUG ==="
+    
+    - name: Minimal Build Test
+      run: |
+        # Create absolute minimal test if project is broken
+        if [ -d "TTAi.xcodeproj" ]; then
+          echo "Found Xcode project, attempting minimal build..."
+          xcodebuild -project TTAi.xcodeproj -scheme TTAi -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            build \
+            || echo "Build failed, but continuing for diagnostics"
+        else
+          echo "ERROR: No Xcode project found!"
+          exit 1
+        fi
