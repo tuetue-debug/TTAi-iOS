@@ -34,7 +34,7 @@ jobs:
           CODE_SIGN_ENTITLEMENTS="" \
           PROVISIONING_PROFILE="" \
           DEVELOPMENT_TEAM="" \
-          INFOPLIST_FILE=""
+          -allowProvisioningUpdates
     
     - name: Run Tests
       run: |
