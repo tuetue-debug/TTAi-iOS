@@ -9,41 +9,35 @@ import SwiftUI
 
 @main
 struct TTAiApp: App {
-    @StateObject private var appState = AppState()
+    @State private var isDarkMode = false
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(appState)
-                .networkAware()
+            ContentView(isDarkMode: $isDarkMode)
         }
     }
 }
 
-class AppState: ObservableObject {
-    @Published var selectedModel: AIModel = .gptMini
-    @Published var chatHistory: [ChatMessage] = []
-    @Published var isDarkMode: Bool = false
-    
-    init() {
-        // Load saved settings
-        loadSettings()
-    }
-    
-    private func loadSettings() {
-        // TODO: Load from UserDefaults
-    }
-    
-    private func saveSettings() {
-        // TODO: Save to UserDefaults
-    }
-}
-
 struct ContentView: View {
-    @EnvironmentObject var appState: AppState
+    @Binding var isDarkMode: Bool
     
     var body: some View {
-        SplashScreen()
-            .preferredColorScheme(appState.isDarkMode ? .dark : .light)
+        VStack {
+            Image(systemName: "brain.head.profile")
+                .font(.system(size: 60))
+                .foregroundColor(.blue)
+            Text("TTAi")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            Text("Tuệ Tuệ AI Assistant")
+                .font(.title2)
+                .foregroundColor(.gray)
+            Text("Build successful! 🎉")
+                .font(.title3)
+                .padding(.top, 20)
+                .foregroundColor(.green)
+        }
+        .preferredColorScheme(isDarkMode ? .dark : .light)
+        .padding()
     }
 }

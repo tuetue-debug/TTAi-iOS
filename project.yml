@@ -1,0 +1,40 @@
+name: TTAi
+options:
+  bundleIdPrefix: Minh-Tue-Trading-Investnent-Joint-Stock-Copany
+  deploymentTarget:
+    iOS: 17.2
+  xcodeVersion: 16.4
+  
+targets:
+  TTAi:
+    type: application
+    platform: iOS
+    sources:
+      - path: TTAi
+        excludes:
+          - "**/*.xcodeproj"
+          - "**/*.xcworkspace"
+          - "**/TTAiTests"
+          - "**/TTAiUITests"
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: ${bundleIdPrefix}.TTAi
+      TARGETED_DEVICE_FAMILY: 1
+      IPHONEOS_DEPLOYMENT_TARGET: 17.2
+      SWIFT_VERSION: 5.0
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: Foundation.framework
+
+  TTAiTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [TTAi/TTAiTests]
+    dependencies:
+      - target: TTAi
+
+  TTAiUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [TTAi/TTAiUITests]
+    dependencies:
+      - target: TTAi

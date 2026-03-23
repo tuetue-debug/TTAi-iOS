@@ -3,84 +3,21 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 68;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		27E67B822F6FDFBF00232824 /* TTAiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E67B812F6FDFBF00232824 /* TTAiApp.swift */; };
-		27E67B842F6FDFBF00232824 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E67B832F6FDFBF00232824 /* ContentView.swift */; };
 		27E67B862F6FDFC200232824 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 27E67B852F6FDFC200232824 /* Assets.xcassets */; };
 		27E67B8A2F6FDFC200232824 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 27E67B892F6FDFC200232824 /* Preview Assets.xcassets */; };
-		27E67B942F6FDFC300232824 /* TTAiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E67B932F6FDFC300232824 /* TTAiTests.swift */; };
-		27E67B9E2F6FDFC300232824 /* TTAiUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E67B9D2F6FDFC300232824 /* TTAiUITests.swift */; };
-		27E67BA02F6FDFC300232824 /* TTAiUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E67B9F2F6FDFC300232824 /* TTAiUITestsLaunchTests.swift */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		27E67B902F6FDFC300232824 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 27E67B762F6FDFBF00232824 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 27E67B7D2F6FDFBF00232824;
-			remoteInfo = TTAi;
-		};
-		27E67B9A2F6FDFC300232824 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 27E67B762F6FDFBF00232824 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 27E67B7D2F6FDFBF00232824;
-			remoteInfo = TTAi;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		27E67B7E2F6FDFBF00232824 /* TTAi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TTAi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		27E67B812F6FDFBF00232824 /* TTAiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiApp.swift; sourceTree = "<group>"; };
-		27E67B832F6FDFBF00232824 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		27E67B852F6FDFC200232824 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		27E67B872F6FDFC200232824 /* TTAi.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TTAi.entitlements; sourceTree = "<group>"; };
 		27E67B892F6FDFC200232824 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		27E67B8F2F6FDFC300232824 /* TTAiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TTAiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		27E67B932F6FDFC300232824 /* TTAiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiTests.swift; sourceTree = "<group>"; };
-		27E67B992F6FDFC300232824 /* TTAiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TTAiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		27E67B9D2F6FDFC300232824 /* TTAiUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiUITests.swift; sourceTree = "<group>"; };
-		27E67B9F2F6FDFC300232824 /* TTAiUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTAiUITestsLaunchTests.swift; sourceTree = "<group>"; };
-
-		0000000000000000B1A0E60349744D5896FDD6A06046EE28 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\ContentView.swift"; sourceTree = "<group>"; };
-
-		00000000000000004B5CF55E20834A07B19CFEE14B88FBA2 /* TTAiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiApp.swift"; sourceTree = "<group>"; };
-
-		0000000000000000652316DFD7994F39945F87D5642071CE /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\App\MainTabView.swift"; sourceTree = "<group>"; };
-
-		00000000000000009DB9C99E90A541F59477C563501EC8FB /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\App\SplashScreen.swift"; sourceTree = "<group>"; };
-
-		00000000000000005BE82C38AB46442A9D49225241C036C7 /* APIClient+Mock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\API\APIClient+Mock.swift"; sourceTree = "<group>"; };
-
-		00000000000000003E21046EF55447C9A4B40A6953A5621D /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\API\APIClient.swift"; sourceTree = "<group>"; };
-
-		0000000000000000C7307C5EADD4485398499FF04B3EDEEA /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\API\NetworkMonitor.swift"; sourceTree = "<group>"; };
-
-		0000000000000000BFB8311FEC604CE9A6B439C62B23A244 /* AIModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Models\AIModel.swift"; sourceTree = "<group>"; };
-
-		000000000000000019DE3D07957240688C05EC45680BD9EC /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Models\ChatMessage.swift"; sourceTree = "<group>"; };
-
-		0000000000000000B12DC8465FBA4626BBA7B0A78B447DCF /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Utils\Extensions.swift"; sourceTree = "<group>"; };
-
-		0000000000000000F015B6C48C174C76AC6AC8076AAE5CBB /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Core\Utils\MockData.swift"; sourceTree = "<group>"; };
-
-		0000000000000000FD4F194C4ABD40A78F85960466B3A354 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\Chat\ChatView.swift"; sourceTree = "<group>"; };
-
-		000000000000000062A92E578BD949FA8AC4B8EAE9E94C43 /* CodeGeneratorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\CodeGenerator\CodeGeneratorView.swift"; sourceTree = "<group>"; };
-
-		00000000000000005B6BCA866A1E499DAD70F99E59A19FE4 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\History\HistoryView.swift"; sourceTree = "<group>"; };
-
-		0000000000000000F135A6600F994BE5ADB0957CD668EFEE /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\Features\Settings\SettingsView.swift"; sourceTree = "<group>"; };
-
-		0000000000000000221A4593F9EA4887B3DC25BED76B6A36 /* TTAiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiTests\TTAiTests.swift"; sourceTree = "<group>"; };
-
-		00000000000000008034EA9767A74F3CB78BF80ED2D7A199 /* TTAiUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiUITests\TTAiUITests.swift"; sourceTree = "<group>"; };
-
-		0000000000000000CE6FC7D0EC86422C86FAB42C9A8340B4 /* TTAiUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "..\TTAi\TTAiUITests\TTAiUITestsLaunchTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,39 +28,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		27E67B8C2F6FDFC300232824 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		27E67B962F6FDFC300232824 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		27E67B752F6FDFBF00232824 = {
+		27E67B7F2F6FDFBF00232824 /* TTAi */ = {
 			isa = PBXGroup;
 			children = (
 				27E67B802F6FDFBF00232824 /* TTAi */,
-				27E67B922F6FDFC300232824 /* TTAiTests */,
-				27E67B9C2F6FDFC300232824 /* TTAiUITests */,
-				27E67B7F2F6FDFBF00232824 /* Products */,
+				27E67B7E2F6FDFBF00232824 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		27E67B7F2F6FDFBF00232824 /* Products */ = {
+		27E67B7E2F6FDFBF00232824 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				27E67B7E2F6FDFBF00232824 /* TTAi.app */,
-				27E67B8F2F6FDFC300232824 /* TTAiTests.xctest */,
-				27E67B992F6FDFC300232824 /* TTAiUITests.xctest */,
+				27E67B7D2F6FDFBF00232824 /* TTAi.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -132,7 +51,6 @@
 			isa = PBXGroup;
 			children = (
 				27E67B812F6FDFBF00232824 /* TTAiApp.swift */,
-				27E67B832F6FDFBF00232824 /* ContentView.swift */,
 				27E67B852F6FDFC200232824 /* Assets.xcassets */,
 				27E67B872F6FDFC200232824 /* TTAi.entitlements */,
 				27E67B882F6FDFC200232824 /* Preview Content */,
@@ -146,23 +64,6 @@
 				27E67B892F6FDFC200232824 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
-			sourceTree = "<group>";
-		};
-		27E67B922F6FDFC300232824 /* TTAiTests */ = {
-			isa = PBXGroup;
-			children = (
-				27E67B932F6FDFC300232824 /* TTAiTests.swift */,
-			);
-			path = TTAiTests;
-			sourceTree = "<group>";
-		};
-		27E67B9C2F6FDFC300232824 /* TTAiUITests */ = {
-			isa = PBXGroup;
-			children = (
-				27E67B9D2F6FDFC300232824 /* TTAiUITests.swift */,
-				27E67B9F2F6FDFC300232824 /* TTAiUITestsLaunchTests.swift */,
-			);
-			path = TTAiUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -185,81 +86,34 @@
 			productReference = 27E67B7E2F6FDFBF00232824 /* TTAi.app */;
 			productType = "com.apple.product-type.application";
 		};
-		27E67B8E2F6FDFC300232824 /* TTAiTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 27E67BA62F6FDFC300232824 /* Build configuration list for PBXNativeTarget "TTAiTests" */;
-			buildPhases = (
-				27E67B8B2F6FDFC300232824 /* Sources */,
-				27E67B8C2F6FDFC300232824 /* Frameworks */,
-				27E67B8D2F6FDFC300232824 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				27E67B912F6FDFC300232824 /* PBXTargetDependency */,
-			);
-			name = TTAiTests;
-			productName = TTAiTests;
-			productReference = 27E67B8F2F6FDFC300232824 /* TTAiTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		27E67B982F6FDFC300232824 /* TTAiUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 27E67BA92F6FDFC300232824 /* Build configuration list for PBXNativeTarget "TTAiUITests" */;
-			buildPhases = (
-				27E67B952F6FDFC300232824 /* Sources */,
-				27E67B962F6FDFC300232824 /* Frameworks */,
-				27E67B972F6FDFC300232824 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				27E67B9B2F6FDFC300232824 /* PBXTargetDependency */,
-			);
-			name = TTAiUITests;
-			productName = TTAiUITests;
-			productReference = 27E67B992F6FDFC300232824 /* TTAiUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		27E67B762F6FDFBF00232824 /* Project object */ = {
+		27E67B782F6FDFBF00232824 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1520;
-				LastUpgradeCheck = 1520;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
 				TargetAttributes = {
 					27E67B7D2F6FDFBF00232824 = {
-						CreatedOnToolsVersion = 15.2;
-					};
-					27E67B8E2F6FDFC300232824 = {
-						CreatedOnToolsVersion = 15.2;
-						TestTargetID = 27E67B7D2F6FDFBF00232824;
-					};
-					27E67B982F6FDFC300232824 = {
-						CreatedOnToolsVersion = 15.2;
-						TestTargetID = 27E67B7D2F6FDFBF00232824;
+						CreatedOnToolsVersion = 16.4;
 					};
 				};
 			};
-			buildConfigurationList = 27E67B792F6FDFBF00232824 /* Build configuration list for PBXProject "TTAi" */;
-			compatibilityVersion = "Xcode 14.0";
+			buildConfigurationList = 27E67B7B2F6FDFBF00232824 /* Build configuration list for PBXProject "TTAi" */;
+			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 27E67B752F6FDFBF00232824;
-			productRefGroup = 27E67B7F2F6FDFBF00232824 /* Products */;
+			mainGroup = 27E67B7F2F6FDFBF00232824 /* TTAi */;
+			productRefGroup = 27E67B7E2F6FDFBF00232824 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				27E67B7D2F6FDFBF00232824 /* TTAi */,
-				27E67B8E2F6FDFC300232824 /* TTAiTests */,
-				27E67B982F6FDFC300232824 /* TTAiUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -269,22 +123,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				27E67B8A2F6FDFC200232824 /* Preview Assets.xcassets in Resources */,
 				27E67B862F6FDFC200232824 /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		27E67B8D2F6FDFC300232824 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		27E67B972F6FDFC300232824 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
+				27E67B8A2F6FDFC200232824 /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,49 +135,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				27E67B842F6FDFBF00232824 /* ContentView.swift in Sources */,
 				27E67B822F6FDFBF00232824 /* TTAiApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		27E67B8B2F6FDFC300232824 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				27E67B942F6FDFC300232824 /* TTAiTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		27E67B952F6FDFC300232824 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				27E67BA02F6FDFC300232824 /* TTAiUITestsLaunchTests.swift in Sources */,
-				27E67B9E2F6FDFC300232824 /* TTAiUITests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		27E67B912F6FDFC300232824 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 27E67B7D2F6FDFBF00232824 /* TTAi */;
-			targetProxy = 27E67B902F6FDFC300232824 /* PBXContainerItemProxy */;
-		};
-		27E67B9B2F6FDFC300232824 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 27E67B7D2F6FDFBF00232824 /* TTAi */;
-			targetProxy = 27E67B9A2F6FDFC300232824 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		27E67BA12F6FDFC300232824 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -370,8 +178,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -385,12 +192,14 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -398,7 +207,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -431,8 +239,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -440,10 +247,14 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -455,33 +266,18 @@
 				CODE_SIGN_ENTITLEMENTS = TTAi/TTAi.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"TTAi/Preview Content\"";
 				DEVELOPMENT_TEAM = 2R69PL9QDQ;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = TTAi/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "Minh-Tue-Trading-Investnent-Joint-Stock-Copany.TTAi";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};
@@ -493,166 +289,11 @@
 				CODE_SIGN_ENTITLEMENTS = TTAi/TTAi.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"TTAi/Preview Content\"";
 				DEVELOPMENT_TEAM = 2R69PL9QDQ;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = TTAi/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Minh-Tue-Trading-Investnent-Joint-Stock-Copany.TTAi";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
-		27E67BA72F6FDFC300232824 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2R69PL9QDQ;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Minh-Tue-Trading-Investnent-Joint-Stock-Copany.TTAiTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TTAi.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TTAi";
-			};
-			name = Debug;
-		};
-		27E67BA82F6FDFC300232824 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2R69PL9QDQ;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Minh-Tue-Trading-Investnent-Joint-Stock-Copany.TTAiTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TTAi.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TTAi";
-			};
-			name = Release;
-		};
-		27E67BAA2F6FDFC300232824 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2R69PL9QDQ;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Minh-Tue-Trading-Investnent-Joint-Stock-Copany.TTAiUITests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = TTAi;
-			};
-			name = Debug;
-		};
-		27E67BAB2F6FDFC300232824 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2R69PL9QDQ;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
-				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Minh-Tue-Trading-Investnent-Joint-Stock-Copany.TTAiUITests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = TTAi;
-			};
-			name = Release;
-		};
-/* End XCBuildConfiguration section */
-
-/* Begin XCConfigurationList section */
-		27E67B792F6FDFBF00232824 /* Build configuration list for PBXProject "TTAi" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				27E67BA12F6FDFC300232824 /* Debug */,
-				27E67BA22F6FDFC300232824 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		27E67BA32F6FDFC300232824 /* Build configuration list for PBXNativeTarget "TTAi" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				27E67BA42F6FDFC300232824 /* Debug */,
-				27E67BA52F6FDFC300232824 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		27E67BA62F6FDFC300232824 /* Build configuration list for PBXNativeTarget "TTAiTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				27E67BA72F6FDFC300232824 /* Debug */,
-				27E67BA82F6FDFC300232824 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		27E67BA92F6FDFC300232824 /* Build configuration list for PBXNativeTarget "TTAiUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				27E67BAA2F6FDFC300232824 /* Debug */,
-				27E67BAB2F6FDFC300232824 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-/* End XCConfigurationList section */
-	};
-	rootObject = 27E67B762F6FDFBF00232824 /* Project object */;
-}
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+			
