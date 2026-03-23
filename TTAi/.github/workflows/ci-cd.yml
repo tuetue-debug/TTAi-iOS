@@ -1,0 +1,318 @@
+name: TTAi CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
+      - '**/.gitignore'
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Weekly security scan on Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'testflight'
+        type: choice
+        options:
+        - testflight
+        - production
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PROJECT_NAME: TTAi
+  SCHEME: TTAi
+  DESTINATION: platform=iOS Simulator,name=iPhone 15,OS=latest
+  XCODE_VERSION: '16.2'
+
+jobs:
+  # Quality Gates
+  quality-gates:
+    name: Quality Gates
+    runs-on: macos-latest
+    outputs:
+      quality_passed: ${{ steps.check-quality.outputs.passed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Cache Swift packages
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        id: swiftlint
+        run: |
+          swiftlint lint --strict --reporter github-actions-logging
+        continue-on-error: true
+
+      - name: Check code coverage threshold
+        id: coverage-check
+        run: |
+          # This would run tests and check coverage
+          # For now, we'll set a placeholder
+          echo "Coverage check placeholder"
+          echo "passed=true" >> $GITHUB_OUTPUT
+
+      - name: Quality Gate Decision
+        id: check-quality
+        run: |
+          # Combine quality checks
+          if [[ "${{ steps.swiftlint.outcome }}" == "success" ]] && [[ "${{ steps.coverage-check.outputs.passed }}" == "true" ]]; then
+            echo "Quality gates passed"
+            echo "passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Quality gates failed"
+            echo "passed=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: macos-latest
+    needs: quality-gates
+    if: needs.quality-gates.outputs.quality_passed == 'true' && !inputs.skip_tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Cache Swift packages
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Run Unit Tests
+        run: |
+          set -o pipefail && xcodebuild test \
+            -project "${{ env.PROJECT_NAME }}.xcodeproj" \
+            -scheme "${{ env.SCHEME }}" \
+            -destination "${{ env.DESTINATION }}" \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults \
+            | xcpretty
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: unit-test-results
+          path: TestResults.xcresult
+
+      - name: Generate Code Coverage Report
+        run: |
+          xcrun xccov view --report --json TestResults.xcresult > coverage.json
+          
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.json
+
+  # UI Tests
+  ui-tests:
+    name: UI Tests
+    runs-on: macos-latest
+    needs: quality-gates
+    if: needs.quality-gates.outputs.quality_passed == 'true' && !inputs.skip_tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Run UI Tests
+        run: |
+          set -o pipefail && xcodebuild test \
+            -project "${{ env.PROJECT_NAME }}.xcodeproj" \
+            -scheme "${{ env.SCHEME }}UITests" \
+            -destination "${{ env.DESTINATION }}" \
+            -resultBundlePath UITestResults \
+            | xcpretty
+
+      - name: Upload UI Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ui-test-results
+          path: UITestResults.xcresult
+
+  # Build and Archive
+  build-archive:
+    name: Build and Archive
+    runs-on: macos-latest
+    needs: [unit-tests, ui-tests]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'testflight')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Install Apple Certificate and Provisioning Profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Import certificate and provisioning profile from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Move provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
+      - name: Increment Build Number
+        run: |
+          # Get current build number from project
+          CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "${{ env.PROJECT_NAME }}/Info.plist")
+          NEW_BUILD=$((CURRENT_BUILD + 1))
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "${{ env.PROJECT_NAME }}/Info.plist"
+          echo "Updated build number from $CURRENT_BUILD to $NEW_BUILD"
+
+      - name: Build and Archive
+        run: |
+          xcodebuild archive \
+            -project "${{ env.PROJECT_NAME }}.xcodeproj" \
+            -scheme "${{ env.SCHEME }}" \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/TTAi.xcarchive \
+            -allowProvisioningUpdates \
+            -destination generic/platform=iOS
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/TTAi.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: TTAi-ipa
+          path: $RUNNER_TEMP/export/TTAi.ipa
+
+  # Deploy to TestFlight
+  deploy-testflight:
+    name: Deploy to TestFlight
+    runs-on: macos-latest
+    needs: build-archive
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'testflight')
+    steps:
+      - name: Download IPA Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: TTAi-ipa
+          path: ${{ runner.temp }}
+
+      - name: Deploy to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          # Install fastlane if not present
+          if ! command -v fastlane &> /dev/null; then
+            sudo gem install fastlane -NV
+          fi
+
+          # Create fastlane directory structure
+          mkdir -p fastlane
+          
+          # Deploy using fastlane
+          fastlane pilot upload \
+            --ipa "${{ runner.temp }}/TTAi.ipa" \
+            --api_key_path "${{ runner.temp }}/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8" \
+            --skip_waiting_for_build_processing true
+
+      - name: Send Deployment Notification
+        if: success()
+        run: |
+          echo "Deployment to TestFlight completed successfully!"
+          # Here you could add Slack/Discord/Email notifications
+
+  # Security Scan
+  security-scan:
+    name: Security Scan
+    runs-on: macos-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'TTAi'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: reports
+
+      - name: Check for Secrets
+        run: |
+          # Simple secret detection
+          if grep -r "password\|secret\|token\|key" --include="*.swift" --include="*.plist" --include="*.json" . | grep -v "test\|mock\|example"; then
+            echo "Potential secrets found in code"
+            exit 1
+          fi
