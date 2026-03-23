@@ -18,16 +18,20 @@ jobs:
     
     - name: Build
       run: |
+        echo "Current directory:"
+        pwd
+        echo "Listing contents:"
+        ls -la
         if [ -d "TTAi" ]; then
           cd TTAi
+          echo "Inside TTAi directory:"
+          ls -la
           echo "Listing available schemes..."
           xcodebuild -list || true
           echo "Building..."
           xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build
         else
-          echo "TTAi directory not found. Current directory:"
-          pwd
-          ls -la
+          echo "TTAi directory not found."
           find . -name "*.xcodeproj" -o -name "*.xcworkspace"
         fi
     
