@@ -34,7 +34,8 @@ jobs:
           CODE_SIGN_ENTITLEMENTS="" \
           PROVISIONING_PROFILE="" \
           DEVELOPMENT_TEAM="" \
-          -allowProvisioningUpdates
+          -allowProvisioningUpdates \
+          -quiet
     
     - name: Run Tests
       run: |
