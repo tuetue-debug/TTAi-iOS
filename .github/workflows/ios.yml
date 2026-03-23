@@ -23,7 +23,7 @@ jobs:
           echo "Listing available schemes..."
           xcodebuild -list || true
           echo "Building..."
-          xcodebuild -scheme TTAi -destination 'platform=iOS Simulator,name=iPhone 15' build
+          xcodebuild -scheme TTAi -destination 'generic/platform=iOS Simulator' build
         else
           echo "TTAi directory not found. Current directory:"
           pwd
@@ -35,5 +35,5 @@ jobs:
       run: |
         if [ -d "TTAi" ]; then
           cd TTAi
-          xcodebuild test -scheme TTAi -destination 'platform=iOS Simulator,name=iPhone 15' || echo "Tests may fail if no tests exist"
+          xcodebuild test -scheme TTAi -destination 'generic/platform=iOS Simulator' || echo "Tests may fail if no tests exist"
         fi
