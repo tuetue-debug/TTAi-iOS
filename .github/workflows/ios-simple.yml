@@ -1,0 +1,52 @@
+name: iOS CI Simple
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Select Xcode
+      run: sudo xcode-select -switch /Applications/Xcode.app
+    
+    - name: Debug Info
+      run: |
+        echo "=== CI DEBUG ==="
+        echo "PWD: $(pwd)"
+        echo "Files:"
+        ls -la
+        echo "TTAi dir:"
+        ls -la TTAi/ 2>/dev/null || echo "No TTAi dir"
+        echo "Xcode project:"
+        find . -name "*.xcodeproj" -o -name "*.xcworkspace" 2>/dev/null || echo "No project found"
+        echo "=== END DEBUG ==="
+    
+    - name: Build
+      run: |
+        # Minimal build - just compile
+        xcodebuild -project TTAi.xcodeproj -scheme TTAi \
+          -destination 'generic/platform=iOS Simulator' \
+          -configuration Debug \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          build \
+          || { echo "Build failed"; exit 1; }
+    
+    - name: Archive (Optional)
+      if: success()
+      run: |
+        echo "Build succeeded! 🎉"
+        # Optional: create archive for distribution
+        # xcodebuild -project TTAi.xcodeproj -scheme TTAi \
+        #   -destination 'generic/platform=iOS Simulator' \
+        #   -configuration Release \
+        #   -archivePath ./build/TTAi.xcarchive \
+        #   archive
