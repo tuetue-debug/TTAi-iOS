@@ -1,0 +1,426 @@
+:root {
+    --ttai-bg: #ffffff;
+    --ttai-card: #ffffff;
+    --ttai-border: #ebe8fb;
+    --ttai-primary: #f04d7d;
+    --ttai-primary-dark: #d93c6a;
+    --ttai-text: #1b1f3b;
+    --ttai-muted: #6b6a7d;
+    --ttai-radius: 24px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.ttai-shell {
+    width: 100%;
+    margin: 0 auto;
+    padding: 48px 0;
+    background: var(--ttai-bg);
+}
+
+.ttai-stage {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 32px;
+}
+
+.ttai-brief {
+    background: var(--ttai-card);
+    border-radius: var(--ttai-radius);
+    padding: 32px;
+    box-shadow: 0 25px 60px rgba(19, 15, 71, 0.08);
+    border: 1px solid var(--ttai-border);
+}
+
+.ttai-pill {
+    display: inline-flex;
+    padding: 4px 14px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(240, 77, 125, 0.12);
+    color: var(--ttai-primary);
+    margin-bottom: 16px;
+}
+
+.ttai-brief h1 {
+    font-size: 2.5rem;
+    line-height: 1.2;
+    margin: 0 0 12px;
+    color: var(--ttai-text);
+}
+
+.ttai-lede {
+    margin: 0 0 18px;
+    font-size: 1.05rem;
+    color: var(--ttai-muted);
+}
+
+.ttai-points {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ttai-points li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ttai-text);
+    font-weight: 500;
+}
+
+.ttai-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+}
+
+.ttai-chip {
+    background: rgba(107, 106, 125, 0.08);
+    border-radius: 16px;
+    padding: 12px 16px;
+    min-width: 150px;
+}
+
+.chip-label {
+    font-size: 0.8rem;
+    color: var(--ttai-muted);
+    margin: 0 0 4px;
+}
+
+.chip-value {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--ttai-text);
+}
+
+.ttai-live {
+    background: var(--ttai-primary);
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.ttai-chat-card {
+    background: var(--ttai-card);
+    border-radius: 28px;
+    border: 1px solid var(--ttai-border);
+    box-shadow: 0 25px 60px rgba(19, 15, 71, 0.08);
+    display: flex;
+    flex-direction: column;
+    padding: 28px;
+    min-height: 540px;
+    width: 100%;
+    font-size: 0.95rem;
+}
+
+.ttai-chat-header {
+    padding-bottom: 8px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.chat-badge {
+    display: inline-flex;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background: rgba(240, 77, 125, 0.12);
+    color: var(--ttai-primary);
+    margin-bottom: 8px;
+}
+
+.ttai-chat-header h3 {
+    margin: 0;
+    font-size: 1.6rem;
+    color: var(--ttai-text);
+}
+
+.ttai-subtitle {
+    margin: 4px 0 0;
+    color: var(--ttai-muted);
+    font-size: 0.95rem;
+}
+
+.ttai-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: var(--ttai-primary-dark);
+}
+
+.ttai-status-only {
+    gap: 0;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #38d27a;
+    box-shadow: 0 0 8px rgba(56, 210, 122, 0.8);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.25); opacity: 0.6; }
+}
+
+.ttai-chat-messages {
+    flex: 0 0 auto;
+    padding: 0;
+    margin-top: 0;
+    background: transparent;
+    border-radius: 0;
+    border: none;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    height: 485px;
+    min-height: 390px;
+}
+
+.message {
+    max-width: 80%;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #fff;
+    border: 1px solid rgba(27, 31, 59, 0.06);
+    box-shadow: 0 10px 30px rgba(27, 31, 59, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.user-message {
+    align-self: flex-end;
+    border-bottom-right-radius: 6px;
+}
+
+.ai-message {
+    align-self: flex-start;
+    border-bottom-left-radius: 6px;
+}
+
+.message-body {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.message-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    flex: 0 0 auto;
+}
+
+.message-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    text-transform: none;
+}
+
+.message-actor {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.meta-dot {
+    opacity: 0.7;
+}
+
+.ttai-chat-card[data-theme="light"] .user-message {
+    background: #343541;
+    color: #f7f9ff;
+}
+
+.ttai-chat-card[data-theme="dark"] .user-message {
+    background: #eceef5;
+    color: #171b2a;
+}
+
+.ttai-chat-card[data-theme="light"] .ai-message {
+    background: #f7f8fb;
+    color: #1f2433;
+}
+
+.ttai-chat-card[data-theme="dark"] .ai-message {
+    background: #2a2d37;
+    color: #f4f6fb;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.ttai-chat-card[data-theme="light"] .user-message .message-icon {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fefefe;
+}
+
+.ttai-chat-card[data-theme="dark"] .user-message .message-icon {
+    background: rgba(23, 27, 42, 0.1);
+    color: #171b2a;
+}
+
+.ttai-chat-card[data-theme="light"] .ai-message .message-icon {
+    background: rgba(23, 33, 53, 0.08);
+    color: #1f2433;
+}
+
+.ttai-chat-card[data-theme="dark"] .ai-message .message-icon {
+    background: rgba(255, 255, 255, 0.15);
+    color: #f4f6fb;
+}
+
+.message-content {
+    line-height: 1.55;
+    color: var(--ttai-text);
+    font-size: 0.92rem;
+    font-weight: 400;
+}
+
+.ttai-chat-card[data-theme="light"] .user-message .message-content,
+.ttai-chat-card[data-theme="light"] .user-message strong {
+    color: #f8f9ff;
+}
+
+.ttai-chat-card[data-theme="dark"] .user-message .message-content,
+.ttai-chat-card[data-theme="dark"] .user-message strong {
+    color: #1a1d2c;
+}
+
+.ttai-chat-card[data-theme="dark"] .ai-message .message-content,
+.ttai-chat-card[data-theme="dark"] .ai-message strong {
+    color: #f4f6fb;
+}
+
+.message-meta {
+    color: var(--ttai-muted);
+}
+
+.message-time {
+    font-size: 0.75rem;
+}
+
+.ttai-chat-input {
+    display: flex;
+    gap: 12px;
+    padding: 20px 0 0;
+}
+
+#ttai-user-input {
+    flex: 1;
+    border: 1px solid var(--ttai-border);
+    border-radius: 18px;
+    padding: 12px 16px;
+    resize: none;
+    font-size: 1rem;
+    font-family: inherit;
+    color: var(--ttai-text);
+    min-height: 60px;
+}
+
+.send-button {
+    width: 58px;
+    border-radius: 18px;
+    border: none;
+    background: linear-gradient(135deg, var(--ttai-primary), var(--ttai-primary-dark));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #fff;
+    transition: transform 0.2s ease;
+}
+
+.send-button:hover {
+    transform: translateY(-2px);
+}
+
+.ttai-chat-footer {
+    padding-top: 20px;
+    color: var(--ttai-muted);
+    font-size: 0.9rem;
+}
+
+.ttai-typing-indicator {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.ttai-typing-indicator span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ttai-muted);
+    animation: typing 1.4s infinite;
+}
+
+.ttai-typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+.ttai-typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typing {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+.ttai-type-line {
+    margin: 0 0 6px;
+}
+
+.ttai-type-line:last-child {
+    margin-bottom: 0;
+}
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ttai-chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ttai-chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(107, 106, 125, 0.3);
+    border-radius: 999px;
+}
+
+@media (max-width: 1024px) {
+    .ttai-stage {
+        padding: 0 24px;
+    }
+}
+
+@media (max-width: 768px) {
+    .ttai-stage {
+        padding: 0 18px;
+    }
+    .ttai-chat-card {
+        border-radius: 22px;
+    }
+    #ttai-user-input {
+        min-height: 80px;
+    }
+    .ttai-chat-messages {
+        height: 390px;
+    }
+}
