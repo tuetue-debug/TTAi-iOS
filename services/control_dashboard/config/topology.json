@@ -1,0 +1,43 @@
+{
+  "nodes": [
+    {
+      "id": "vannt-home-pc",
+      "label": "Home Core",
+      "location": "vannt-home-pc",
+      "services": [
+        {
+          "name": "Load Balancer",
+          "type": "load_balancer",
+          "health_url": "http://127.0.0.1:8015/health"
+        },
+        {
+          "name": "Hybrid API",
+          "type": "fastapi",
+          "health_url": "http://127.0.0.1:8005/"
+        },
+        {
+          "name": "RAG Service",
+          "type": "rag",
+          "health_url": "http://127.0.0.1:8075/health"
+        }
+      ]
+    },
+    {
+      "id": "vannt-work-op",
+      "label": "Remote Worker",
+      "location": "vannt-work-op",
+      "services": [
+        {
+          "name": "Remote FastAPI",
+          "type": "remote_api",
+          "health_url": "http://100.89.201.7:8000/"
+        },
+        {
+          "name": "Remote Ollama",
+          "type": "ollama",
+          "health_url": "http://100.89.201.7:11434/api/tags"
+        }
+      ]
+    }
+  ]
+}
