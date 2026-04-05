@@ -1665,7 +1665,7 @@ async def admin_quota_blocked(
     tenant_counts = Counter(event.get("tenant_id") or "unknown" for event in blocked_events)
     api_key_counts = Counter(event.get("api_key_id") or "unknown" for event in blocked_events)
     user_counts = Counter(event.get("user_id") or "unknown" for event in blocked_events)
-    reason_counts = Counter((event.get("quota_reason") or event.get("error") or "unknown") for event in blocked_events)
+    reason_counts = Counter(extract_quota_reason(event) for event in blocked_events)
 
     recent_blocked = [
         {
@@ -1675,7 +1675,7 @@ async def admin_quota_blocked(
             "tenant_id": event.get("tenant_id"),
             "api_key_id": event.get("api_key_id"),
             "quota_mode": event.get("quota_mode"),
-            "quota_reason": event.get("quota_reason") or event.get("error"),
+            "quota_reason": extract_quota_reason(event),
             "http_status": event.get("http_status"),
         }
         for event in blocked_events[:recent_limit]
@@ -1747,13 +1747,13 @@ async def control_overview(
                     "user_id": event.get("user_id"),
                     "tenant_id": event.get("tenant_id"),
                     "api_key_id": event.get("api_key_id"),
-                    "reason": event.get("error") or event.get("status"),
+                    "reason": extract_quota_reason(event),
                 }
                 for event in blocked_events[:recent_events_limit]
             ],
             "tenant_breakdown": dict(Counter(event.get("tenant_id") or "unknown" for event in blocked_events).most_common(20)),
             "api_key_breakdown": dict(Counter(event.get("api_key_id") or "unknown" for event in blocked_events).most_common(20)),
-            "reason_breakdown": dict(Counter((event.get("quota_reason") or event.get("error") or "unknown") for event in blocked_events).most_common(20)),
+            "reason_breakdown": dict(Counter(extract_quota_reason(event) for event in blocked_events).most_common(20)),
         },
         "alerts": {
             "recent_errors": recent_errors,
@@ -1776,7 +1776,7 @@ async def control_quota(
         "tenant_breakdown": dict(Counter(event.get("tenant_id") or "unknown" for event in blocked_events).most_common(20)),
         "api_key_breakdown": dict(Counter(event.get("api_key_id") or "unknown" for event in blocked_events).most_common(20)),
         "user_breakdown": dict(Counter(event.get("user_id") or "unknown" for event in blocked_events).most_common(20)),
-        "reason_breakdown": dict(Counter((event.get("quota_reason") or event.get("error") or "unknown") for event in blocked_events).most_common(20)),
+        "reason_breakdown": dict(Counter(extract_quota_reason(event) for event in blocked_events).most_common(20)),
         "recent_blocked": [
             {
                 "timestamp": event.get("timestamp"),
@@ -1785,7 +1785,7 @@ async def control_quota(
                 "tenant_id": event.get("tenant_id"),
                 "api_key_id": event.get("api_key_id"),
                 "quota_mode": event.get("quota_mode"),
-                "quota_reason": event.get("quota_reason") or event.get("error"),
+                "quota_reason": extract_quota_reason(event),
                 "http_status": event.get("http_status"),
             }
             for event in blocked_events[:recent_limit]
@@ -1846,6 +1846,33 @@ async def control_errors(
             for event in error_events[:top_n]
         ],
     }
+
+def extract_quota_reason(event: Dict) -> str:
+    reason = event.get("quota_reason")
+    if reason:
+        return str(reason)
+
+    error_value = event.get("error")
+    if isinstance(error_value, dict):
+        nested_reason = error_value.get("reason") or error_value.get("error")
+        if nested_reason:
+            return str(nested_reason)
+    elif error_value:
+        error_text = str(error_value)
+        if "max_requests_exceeded" in error_text:
+            return "max_requests_exceeded"
+        if "max_tokens_est_exceeded" in error_text:
+            return "max_tokens_est_exceeded"
+        if "max_estimated_cost_exceeded" in error_text:
+            return "max_estimated_cost_exceeded"
+        if error_text != "quota_exceeded":
+            return error_text
+
+    status = event.get("status")
+    if status:
+        return str(status)
+
+    return "unknown"
 
 # Billing config management endpoints
 @app.get("/api/admin/billing/config")

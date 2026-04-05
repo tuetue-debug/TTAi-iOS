@@ -172,6 +172,26 @@ function refreshCurrentPage() {
     loadPage(currentPage);
 }
 
+function formatTimestamp(value) {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('vi-VN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function formatShortLabel(value, maxLength = 18) {
+    if (!value) return '--';
+    const text = String(value);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -300,8 +320,8 @@ function renderOverview() {
                     ${recentErrors.length > 0 ? 
                         recentErrors.slice(0, 5).map(error => `
                             <div class="panel-row">
-                                <span class="panel-label">${error.timestamp || '--'}</span>
-                                <span class="panel-value">${error.message || 'Unknown error'}</span>
+                                <span class="panel-label">${formatTimestamp(error.timestamp)}</span>
+                                <span class="panel-value">${error.error || error.message || error.status || 'Unknown error'}</span>
                             </div>
                         `).join('') : 
                         `<div class="panel-row">
@@ -412,7 +432,7 @@ function renderQuota() {
                     ${Object.entries(apiKeyBreakdown).length > 0 ? 
                         Object.entries(apiKeyBreakdown).slice(0, 5).map(([key, count]) => `
                             <div class="panel-row">
-                                <span class="panel-label">${key.substring(0, 12)}...</span>
+                                <span class="panel-label">${formatShortLabel(key, 12)}</span>
                                 <span class="panel-value">${count}</span>
                             </div>
                         `).join('') : 
@@ -461,10 +481,10 @@ function renderQuota() {
                     <tbody>
                         ${recentBlocked.slice(0, 10).map(event => `
                             <tr>
-                                <td>${event.timestamp || '--'}</td>
+                                <td>${formatTimestamp(event.timestamp)}</td>
                                 <td>${event.tenant_id || '--'}</td>
-                                <td>${event.api_key_id ? event.api_key_id.substring(0, 8) + '...' : '--'}</td>
-                                <td><span class="badge badge-warning">${event.reason || 'unknown'}</span></td>
+                                <td>${formatShortLabel(event.api_key_id, 8)}</td>
+                                <td><span class="badge badge-warning">${event.quota_reason || event.reason || 'unknown'}</span></td>
                             </tr>
                         `).join('')}
                     </tbody>
