@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTAi Control Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #334155;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            background: #10b981;
+            color: white;
+        }
+        
+        .status-badge.degraded {
+            background: #f59e0b;
+        }
+        
+        .status-badge.down {
+            background: #ef4444;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .dashboard-grid.wide {
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        }
+        
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #475569;
+            border-radius: 16px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #60a5fa;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #475569;
+        }
+        
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+        
+        .card-icon {
+            font-size: 24px;
+        }
+        
+        .model-selector {
+            margin-bottom: 20px;
+        }
+        
+        .host-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        
+        .model-dropdown {
+            width: 100%;
+            padding: 12px 16px;
+            background: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 10px;
+            color: #e2e8f0;
+            font-size: 15px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        
+        .model-dropdown:focus {
+            outline: none;
+            border-color: #60a5fa;
+        }
+        
+        .gpu-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .metric {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .summary-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid #334155;
+        }
+
+        .summary-item .label {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .summary-item .value {
+            color: #e2e8f0;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .mini-note {
+            color: #94a3b8;
+            font-size: 13px;
+            margin-top: 14px;
+        }
+        
+        .metric-label {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #60a5fa;
+        }
+        
+        .metric-unit {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-left: 4px;
+        }
+        
+        .vector-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .backup-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        
+        .backup-btn:hover {
+            transform: scale(1.02);
+            opacity: 0.9;
+        }
+        
+        .backup-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .service-list {
+            list-style: none;
+        }
+        
+        .service-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #334155;
+        }
+        
+        .service-item:last-child {
+            border-bottom: none;
+        }
+        
+        .service-name {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .service-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+        
+        .service-status.degraded {
+            background: #f59e0b;
+        }
+        
+        .service-status.down {
+            background: #ef4444;
+        }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            transform: rotate(90deg);
+            box-shadow: 0 12px 30px rgba(59, 130, 246, 0.4);
+        }
+        
+        .timestamp {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .gpu-metrics, .vector-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>✨ TTAi Control Dashboard</h1>
+                <div id="overallStatus" class="status-badge">Loading...</div>
+            </div>
+            <div class="timestamp" id="lastUpdated">Last updated: --:--:--</div>
+        </header>
+        
+        <div class="dashboard-grid wide">
+            <!-- Overview Summary Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📈 Overview Summary</h2>
+                    <div class="card-icon">🧭</div>
+                </div>
+                <div id="overviewSummary" class="summary-grid">
+                    <div class="metric"><div class="metric-label">Health</div><div class="metric-value">--</div></div>
+                    <div class="metric"><div class="metric-label">Window Events</div><div class="metric-value">--</div></div>
+                    <div class="metric"><div class="metric-label">Billable Cost</div><div class="metric-value">--</div></div>
+                    <div class="metric"><div class="metric-label">Blocked Events</div><div class="metric-value">--</div></div>
+                </div>
+                <div class="mini-note">Live from /api/v1/admin/overview</div>
+            </div>
+
+            <!-- Billing Summary Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">💳 Billing Summary</h2>
+                    <div class="card-icon">💰</div>
+                </div>
+                <div id="billingSummary" class="summary-list">
+                    <div class="summary-item"><span class="label">Loading...</span><span class="value">--</span></div>
+                </div>
+            </div>
+
+            <!-- Quota Watch Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🚧 Quota Watch</h2>
+                    <div class="card-icon">⛔</div>
+                </div>
+                <div id="quotaBlockedSummary" class="summary-list">
+                    <div class="summary-item"><span class="label">Loading...</span><span class="value">--</span></div>
+                </div>
+            </div>
+
+            <!-- Error Summary Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🚨 Error Summary</h2>
+                    <div class="card-icon">🩺</div>
+                </div>
+                <div id="errorSummary" class="summary-list">
+                    <div class="summary-item"><span class="label">Loading...</span><span class="value">--</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Model Management Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🤖 Model Management</h2>
+                    <div class="card-icon">⚙️</div>
+                </div>
+                
+                <div id="modelSelectors">
+                    <!-- Dynamic model selectors will be inserted here -->
+                    <div class="loading">Loading models...</div>
+                </div>
+            </div>
+            
+            <!-- GPU Telemetry Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🎮 GPU Telemetry</h2>
+                    <div class="card-icon">📊</div>
+                </div>
+                
+                <div id="gpuMetrics" class="gpu-metrics">
+                    <div class="metric">
+                        <div class="metric-label">GPU Temperature</div>
+                        <div class="metric-value">--<span class="metric-unit">°C</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">GPU Utilization</div>
+                        <div class="metric-value">--<span class="metric-unit">%</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">VRAM Usage</div>
+                        <div class="metric-value">--<span class="metric-unit">GB</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Power Draw</div>
+                        <div class="metric-value">--<span class="metric-unit">W</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Vector Store & RAG Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📚 Vector Store & RAG</h2>
+                    <div class="card-icon">🔍</div>
+                </div>
+                
+                <div id="vectorStats" class="vector-stats">
+                    <div class="metric">
+                        <div class="metric-label">Total Documents</div>
+                        <div class="metric-value">--</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Last Ingest</div>
+                        <div class="metric-value">--<span class="metric-unit">ago</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Backup Size</div>
+                        <div class="metric-value">--<span class="metric-unit">MB</span></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Last Backup</div>
+                        <div class="metric-value">--<span class="metric-unit">ago</span></div>
+                    </div>
+                </div>
+                
+                <button id="backupBtn" class="backup-btn">🔄 Trigger Vector Backup</button>
+            </div>
+            
+            <!-- Service Health Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🏥 Service Health</h2>
+                    <div class="card-icon">❤️</div>
+                </div>
+                
+                <ul id="serviceList" class="service-list">
+                    <li class="service-item">
+                        <div class="service-name">
+                            <div class="service-status"></div>
+                            <span>Loading services...</span>
+                        </div>
+                        <div class="service-port">--</div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <button id="refreshBtn" class="refresh-btn">↻</button>
+    
+    <script src="dashboard.js"></script>
