@@ -251,6 +251,11 @@ def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = No
             "quota_mode": policy.get("quota_mode"),
             "policy": policy,
             "usage": {"requests": 0, "tokens_est": 0, "estimated_cost": 0.0},
+            "remaining": {
+                "requests": None,
+                "tokens_est": None,
+                "estimated_cost": None,
+            },
             "reason": None,
         }
 
@@ -267,6 +272,11 @@ def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = No
     max_requests = policy.get("max_requests")
     max_tokens_est = policy.get("max_tokens_est")
     max_estimated_cost = policy.get("max_estimated_cost")
+    remaining = {
+        "requests": max(max_requests - usage["requests"], 0) if max_requests is not None else None,
+        "tokens_est": max(max_tokens_est - usage["tokens_est"], 0) if max_tokens_est is not None else None,
+        "estimated_cost": round(max(float(max_estimated_cost) - usage["estimated_cost"], 0.0), 8) if max_estimated_cost is not None else None,
+    }
 
     if max_requests is not None and usage["requests"] >= max_requests:
         return {
@@ -275,6 +285,7 @@ def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = No
             "quota_mode": policy.get("quota_mode"),
             "policy": policy,
             "usage": usage,
+            "remaining": remaining,
             "reason": "max_requests_exceeded",
         }
     if max_tokens_est is not None and usage["tokens_est"] >= max_tokens_est:
@@ -284,6 +295,7 @@ def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = No
             "quota_mode": policy.get("quota_mode"),
             "policy": policy,
             "usage": usage,
+            "remaining": remaining,
             "reason": "max_tokens_est_exceeded",
         }
     if max_estimated_cost is not None and usage["estimated_cost"] >= float(max_estimated_cost):
@@ -293,6 +305,7 @@ def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = No
             "quota_mode": policy.get("quota_mode"),
             "policy": policy,
             "usage": usage,
+            "remaining": remaining,
             "reason": "max_estimated_cost_exceeded",
         }
 
@@ -302,6 +315,7 @@ def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = No
         "quota_mode": policy.get("quota_mode"),
         "policy": policy,
         "usage": usage,
+        "remaining": remaining,
         "reason": None,
     }
 
@@ -1359,6 +1373,48 @@ async def test_loadbalancer():
 from datetime import datetime
 # Control Dashboard
 from control_dashboard import collector_service
+
+# Quota status endpoints
+@app.get("/api/admin/quota/status")
+async def admin_quota_status(
+    user_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+):
+    effective_user_id = user_id or "anonymous"
+    quota_status = check_quota_allowance(
+        user_id=effective_user_id,
+        api_key_id=api_key_id,
+        tenant_id=tenant_id,
+    )
+    return {
+        "scope": {
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "api_key_id": api_key_id,
+        },
+        "quota_status": quota_status,
+    }
+
+@app.get("/api/admin/quota/status/users/{target_user_id}")
+async def admin_quota_status_by_user(
+    target_user_id: str,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+):
+    quota_status = check_quota_allowance(
+        user_id=target_user_id,
+        api_key_id=api_key_id,
+        tenant_id=tenant_id,
+    )
+    return {
+        "scope": {
+            "user_id": target_user_id,
+            "tenant_id": tenant_id,
+            "api_key_id": api_key_id,
+        },
+        "quota_status": quota_status,
+    }
 
 # Billing summary endpoint
 @app.get("/api/admin/usage/billing-summary")
