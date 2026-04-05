@@ -1691,6 +1691,162 @@ async def admin_quota_blocked(
         "recent_blocked": recent_blocked,
     }
 
+# Control frontend proxy endpoints (same-origin, no bearer in browser JS)
+@app.get("/control-api/overview")
+async def control_overview(
+    usage_limit: int = Query(default=200, ge=1, le=5000),
+    recent_events_limit: int = Query(default=20, ge=1, le=100),
+):
+    recent_events = read_usage_events(limit=usage_limit)
+    usage_summary = summarize_usage_events(recent_events)
+    billing_summary = summarize_billing_usage(recent_events)
+    health_summary = await health()
+    detailed_health = await health_detailed()
+
+    blocked_events = [
+        event for event in recent_events
+        if event.get("status") == "quota_exceeded" or event.get("http_status") == 429
+    ]
+
+    recent_errors = [
+        {
+            "timestamp": event.get("timestamp"),
+            "request_id": event.get("request_id"),
+            "provider": event.get("provider"),
+            "model": event.get("model"),
+            "status": event.get("status"),
+            "http_status": event.get("http_status"),
+            "error": event.get("error"),
+        }
+        for event in recent_events
+        if event.get("status") not in (None, "success")
+    ][:recent_events_limit]
+
+    return {
+        "health": {
+            "summary": health_summary,
+            "detailed": {
+                "ollama": detailed_health.get("ollama"),
+                "load_balancer": detailed_health.get("load_balancer"),
+                "system": detailed_health.get("system"),
+            },
+        },
+        "usage": {
+            "summary": usage_summary,
+            "recent_events": recent_events[:recent_events_limit],
+            "window_event_count": len(recent_events),
+        },
+        "billing": {
+            "summary": billing_summary,
+        },
+        "quota": {
+            "blocked_event_count": len(blocked_events),
+            "recent_blocked": [
+                {
+                    "timestamp": event.get("timestamp"),
+                    "user_id": event.get("user_id"),
+                    "tenant_id": event.get("tenant_id"),
+                    "api_key_id": event.get("api_key_id"),
+                    "reason": event.get("error") or event.get("status"),
+                }
+                for event in blocked_events[:recent_events_limit]
+            ],
+            "tenant_breakdown": dict(Counter(event.get("tenant_id") or "unknown" for event in blocked_events).most_common(20)),
+            "api_key_breakdown": dict(Counter(event.get("api_key_id") or "unknown" for event in blocked_events).most_common(20)),
+            "reason_breakdown": dict(Counter((event.get("quota_reason") or event.get("error") or "unknown") for event in blocked_events).most_common(20)),
+        },
+        "alerts": {
+            "recent_errors": recent_errors,
+        },
+    }
+
+@app.get("/control-api/quota")
+async def control_quota(
+    limit: int = Query(default=200, ge=1, le=5000),
+    recent_limit: int = Query(default=20, ge=1, le=100),
+):
+    events = read_usage_events(limit=limit)
+    blocked_events = [
+        event for event in events
+        if event.get("status") == "quota_exceeded" or event.get("http_status") == 429
+    ]
+    return {
+        "window_event_count": len(events),
+        "blocked_event_count": len(blocked_events),
+        "tenant_breakdown": dict(Counter(event.get("tenant_id") or "unknown" for event in blocked_events).most_common(20)),
+        "api_key_breakdown": dict(Counter(event.get("api_key_id") or "unknown" for event in blocked_events).most_common(20)),
+        "user_breakdown": dict(Counter(event.get("user_id") or "unknown" for event in blocked_events).most_common(20)),
+        "reason_breakdown": dict(Counter((event.get("quota_reason") or event.get("error") or "unknown") for event in blocked_events).most_common(20)),
+        "recent_blocked": [
+            {
+                "timestamp": event.get("timestamp"),
+                "request_id": event.get("request_id"),
+                "user_id": event.get("user_id"),
+                "tenant_id": event.get("tenant_id"),
+                "api_key_id": event.get("api_key_id"),
+                "quota_mode": event.get("quota_mode"),
+                "quota_reason": event.get("quota_reason") or event.get("error"),
+                "http_status": event.get("http_status"),
+            }
+            for event in blocked_events[:recent_limit]
+        ],
+    }
+
+@app.get("/control-api/billing")
+async def control_billing(limit: int = Query(default=200, ge=1, le=5000)):
+    events = read_usage_events(limit=limit)
+    summary = summarize_billing_usage(events)
+    return {
+        "summary": summary,
+        "tenant_breakdown": summary.get("tenant_breakdown", {}),
+        "api_key_breakdown": summary.get("api_key_breakdown", {}),
+        "provider_breakdown": summary.get("provider_breakdown", {}),
+        "billable_mode_breakdown": summary.get("billable_mode_breakdown", {}),
+    }
+
+@app.get("/control-api/errors")
+async def control_errors(
+    limit: int = Query(default=200, ge=1, le=5000),
+    top_n: int = Query(default=10, ge=1, le=50),
+):
+    events = read_usage_events(limit=limit)
+    error_events = [event for event in events if event.get("status") not in (None, "success")]
+    status_counts = Counter(event.get("status") or "unknown" for event in error_events)
+    http_status_counts = Counter(str(event.get("http_status") or "unknown") for event in error_events)
+    provider_counts = Counter(event.get("provider") or "unknown" for event in error_events)
+    model_counts = Counter(event.get("model") or "unknown" for event in error_events)
+    error_signature_counts = Counter(
+        f"{event.get('status') or 'unknown'}|{event.get('http_status') or 'unknown'}|{event.get('provider') or 'unknown'}|{event.get('model') or 'unknown'}|{(event.get('error') or 'unknown')[:120]}"
+        for event in error_events
+    )
+    return {
+        "window_event_count": len(events),
+        "error_event_count": len(error_events),
+        "status_breakdown": dict(status_counts.most_common(top_n)),
+        "http_status_breakdown": dict(http_status_counts.most_common(top_n)),
+        "provider_breakdown": dict(provider_counts.most_common(top_n)),
+        "model_breakdown": dict(model_counts.most_common(top_n)),
+        "top_error_signatures": [
+            {"signature": signature, "count": count}
+            for signature, count in error_signature_counts.most_common(top_n)
+        ],
+        "recent_errors": [
+            {
+                "timestamp": event.get("timestamp"),
+                "request_id": event.get("request_id"),
+                "user_id": event.get("user_id"),
+                "tenant_id": event.get("tenant_id"),
+                "api_key_id": event.get("api_key_id"),
+                "provider": event.get("provider"),
+                "model": event.get("model"),
+                "status": event.get("status"),
+                "http_status": event.get("http_status"),
+                "error": event.get("error"),
+            }
+            for event in error_events[:top_n]
+        ],
+    }
+
 # Billing config management endpoints
 @app.get("/api/admin/billing/config")
 @app.get(API_V1_ADMIN_BILLING_CONFIG)

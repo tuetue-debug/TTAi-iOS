@@ -2,7 +2,6 @@
 
 // Configuration
 const API_BASE = window.location.origin; // Same origin as FastAPI
-const ADMIN_TOKEN = ''; // Will be handled via server-side session/proxy
 
 // State
 let currentPage = 'overview';
@@ -102,11 +101,6 @@ async function fetchAPI(endpoint, options = {}) {
         ...options.headers
     };
     
-    // In production, token should come from server session/proxy
-    if (ADMIN_TOKEN) {
-        headers['Authorization'] = `Bearer ${ADMIN_TOKEN}`;
-    }
-    
     try {
         const response = await fetch(url, {
             ...options,
@@ -181,7 +175,7 @@ function refreshCurrentPage() {
 // Overview page
 async function loadOverview() {
     try {
-        const data = await fetchAPI('/api/v1/admin/overview?usage_limit=50&recent_events_limit=5');
+        const data = await fetchAPI('/control-api/overview?usage_limit=50&recent_events_limit=5');
         overviewData = data;
         renderOverview();
     } catch (error) {
@@ -324,7 +318,7 @@ function renderOverview() {
 // Quota page
 async function loadQuota() {
     try {
-        const data = await fetchAPI('/api/v1/admin/quota/blocked?limit=50&recent_limit=5');
+        const data = await fetchAPI('/control-api/quota?limit=50&recent_limit=5');
         quotaData = data;
         renderQuota();
     } catch (error) {
@@ -483,7 +477,7 @@ function renderQuota() {
 // Billing page
 async function loadBilling() {
     try {
-        const data = await fetchAPI('/api/v1/admin/usage/billing-summary');
+        const data = await fetchAPI('/control-api/billing?limit=200');
         billingData = data;
         renderBilling();
     } catch (error) {
@@ -616,7 +610,7 @@ function renderBilling() {
 // Errors page
 async function loadErrors() {
     try {
-        const data = await fetchAPI('/api/v1/admin/errors/summary?limit=50&top_n=5');
+        const data = await fetchAPI('/control-api/errors?limit=50&top_n=5');
         errorsData = data;
         renderErrors();
     } catch (error) {
