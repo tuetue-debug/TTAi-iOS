@@ -208,6 +208,104 @@ def estimate_cost(model_name: Optional[str], total_tokens_est: int, provider_typ
     }
 
 
+def get_quota_policy(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
+    user_id = (user_id or "anonymous").strip().lower()
+    api_key_id = (api_key_id or "").strip().lower()
+    tenant_id = (tenant_id or "").strip().lower()
+    config = load_billing_config()
+    quota_config = config.get("quota", {})
+
+    if api_key_id:
+        api_key_policy = quota_config.get("api_keys", {}).get(api_key_id)
+        if api_key_policy is not None:
+            policy = dict(api_key_policy)
+            policy["quota_mode"] = "api_key_quota_v1"
+            return policy
+
+    if tenant_id:
+        tenant_policy = quota_config.get("tenants", {}).get(tenant_id)
+        if tenant_policy is not None:
+            policy = dict(tenant_policy)
+            policy["quota_mode"] = "tenant_quota_v1"
+            return policy
+
+    default_policy = dict(quota_config.get("default", {}))
+    default_policy["quota_mode"] = "default_quota_v1"
+    return default_policy
+
+
+def get_quota_usage(events: List[Dict]) -> Dict:
+    return {
+        "requests": len([e for e in events if e.get("status") == "success"]),
+        "tokens_est": sum(int(e.get("total_tokens_est") or 0) for e in events if e.get("status") == "success"),
+        "estimated_cost": round(sum(float(e.get("estimated_cost") or 0.0) for e in events if e.get("status") == "success"), 8),
+    }
+
+
+def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
+    policy = get_quota_policy(user_id=user_id, api_key_id=api_key_id, tenant_id=tenant_id)
+    if not policy.get("enabled", False):
+        return {
+            "allowed": True,
+            "quota_enabled": False,
+            "quota_mode": policy.get("quota_mode"),
+            "policy": policy,
+            "usage": {"requests": 0, "tokens_est": 0, "estimated_cost": 0.0},
+            "reason": None,
+        }
+
+    all_events = read_usage_events(limit=5000)
+    filtered_events = all_events
+    if api_key_id:
+        filtered_events = [e for e in filtered_events if (e.get("api_key_id") or "") == api_key_id]
+    elif tenant_id:
+        filtered_events = [e for e in filtered_events if (e.get("tenant_id") or "") == tenant_id]
+    else:
+        filtered_events = [e for e in filtered_events if (e.get("user_id") or "") == (user_id or "anonymous")]
+
+    usage = get_quota_usage(filtered_events)
+    max_requests = policy.get("max_requests")
+    max_tokens_est = policy.get("max_tokens_est")
+    max_estimated_cost = policy.get("max_estimated_cost")
+
+    if max_requests is not None and usage["requests"] >= max_requests:
+        return {
+            "allowed": False,
+            "quota_enabled": True,
+            "quota_mode": policy.get("quota_mode"),
+            "policy": policy,
+            "usage": usage,
+            "reason": "max_requests_exceeded",
+        }
+    if max_tokens_est is not None and usage["tokens_est"] >= max_tokens_est:
+        return {
+            "allowed": False,
+            "quota_enabled": True,
+            "quota_mode": policy.get("quota_mode"),
+            "policy": policy,
+            "usage": usage,
+            "reason": "max_tokens_est_exceeded",
+        }
+    if max_estimated_cost is not None and usage["estimated_cost"] >= float(max_estimated_cost):
+        return {
+            "allowed": False,
+            "quota_enabled": True,
+            "quota_mode": policy.get("quota_mode"),
+            "policy": policy,
+            "usage": usage,
+            "reason": "max_estimated_cost_exceeded",
+        }
+
+    return {
+        "allowed": True,
+        "quota_enabled": True,
+        "quota_mode": policy.get("quota_mode"),
+        "policy": policy,
+        "usage": usage,
+        "reason": None,
+    }
+
+
 def classify_billable_flags(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
     user_id = (user_id or "anonymous").strip().lower()
     api_key_id = (api_key_id or "").strip().lower()
@@ -463,6 +561,70 @@ async def chat(
         classification = query_classifier.classify(request.message)
         logger.info(f"Query classified as {classification.complexity.value} "
                    f"(confidence: {classification.confidence:.2f})")
+
+        # Step 1.5: Quota enforcement
+        user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        quota_check = check_quota_allowance(
+            user_id=user_id,
+            api_key_id=request_api_key_id,
+            tenant_id=request_tenant_id,
+        )
+        if not quota_check["allowed"]:
+            processing_time = time.time() - start_time
+            final_status = "quota_exceeded"
+            final_http_status = 429
+            error_detail = quota_check["reason"]
+            input_tokens_est = estimate_tokens(request.message)
+            cost_info = estimate_cost(None, input_tokens_est, provider_type)
+            billable_flags = classify_billable_flags(user_id=user_id, api_key_id=request_api_key_id, tenant_id=request_tenant_id)
+            usage_event = {
+                "event_id": str(uuid.uuid4()),
+                "request_id": request_id,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "channel": "api_chat",
+                "request_path": "/api/chat",
+                "user_id": user_id,
+                "tenant_id": request_tenant_id,
+                "api_key_id": request_api_key_id,
+                "provider": None,
+                "model": None,
+                "provider_type": provider_type,
+                "classification_complexity": classification.complexity.value if classification else None,
+                "classification_confidence": classification.confidence if classification else None,
+                "classification_language": classification.language if classification else None,
+                "needs_context": classification.needs_context if classification else None,
+                "input_chars": len(request.message or ""),
+                "output_chars": 0,
+                "input_tokens_est": input_tokens_est,
+                "output_tokens_est": 0,
+                "total_tokens_est": input_tokens_est,
+                "token_count_mode": "estimated_chars_div_4",
+                "estimated_cost": cost_info["estimated_cost"],
+                "cost_estimate_mode": cost_info["cost_estimate_mode"],
+                "quota_billable": billable_flags["quota_billable"],
+                "billing_billable": billable_flags["billing_billable"],
+                "billable_mode": billable_flags["billable_mode"],
+                "quota_enabled": quota_check["quota_enabled"],
+                "quota_mode": quota_check["quota_mode"],
+                "quota_reason": quota_check["reason"],
+                "quota_policy": quota_check["policy"],
+                "quota_usage": quota_check["usage"],
+                "processing_time": processing_time,
+                "fallback_used": False,
+                "fallback_target": None,
+                "status": final_status,
+                "http_status": final_http_status,
+                "error": error_detail,
+                "source": "repos/TTAi-deployment/fastapi/main.py"
+            }
+            write_usage_event(usage_event)
+            raise HTTPException(status_code=429, detail={
+                "error": "quota_exceeded",
+                "reason": quota_check["reason"],
+                "quota_mode": quota_check["quota_mode"],
+                "usage": quota_check["usage"],
+                "policy": quota_check["policy"],
+            })
         
         # Step 2: Memory retrieval if needed
         context = None
@@ -674,6 +836,8 @@ async def chat(
         )
         
     except HTTPException as e:
+        if final_status == "quota_exceeded":
+            raise
         final_status = "error"
         final_http_status = e.status_code
         error_detail = str(e.detail)

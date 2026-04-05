@@ -61,5 +61,46 @@
       "admin",
       "system"
     ]
+  },
+  "quota": {
+    "default": {
+      "enabled": false,
+      "period": "monthly",
+      "max_requests": 1000,
+      "max_tokens_est": 1000000,
+      "max_estimated_cost": 10.0
+    },
+    "api_keys": {
+      "test_partner_key": {
+        "enabled": true,
+        "period": "monthly",
+        "max_requests": 1,
+        "max_tokens_est": 100000,
+        "max_estimated_cost": 1.0
+      },
+      "prod_customer_001": {
+        "enabled": true,
+        "period": "monthly",
+        "max_requests": 1000,
+        "max_tokens_est": 1000000,
+        "max_estimated_cost": 5.0
+      }
+    },
+    "tenants": {
+      "customer_enterprise": {
+        "enabled": true,
+        "period": "monthly",
+        "max_requests": 5000,
+        "max_tokens_est": 5000000,
+        "max_estimated_cost": 50.0
+      },
+      "internal_dev": {
+        "enabled": false,
+        "period": "monthly",
+        "max_requests": 10000,
+        "max_tokens_est": 10000000,
+        "max_estimated_cost": 0.0
+      }
+    }
   }
 }
