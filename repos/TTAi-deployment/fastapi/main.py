@@ -1847,6 +1847,43 @@ async def control_errors(
         ],
     }
 
+@app.get("/control-api/models")
+async def control_models():
+    models_status = await get_models_status()
+    lb_providers = await get_load_balancer_providers()
+    lb_metrics = await get_load_balancer_metrics()
+    ollama = await ollama_health()
+    ollama_models_resp = await get_ollama_models()
+
+    models_list = list(models_status.values()) if isinstance(models_status, dict) else []
+    provider_list = lb_providers.get("providers", []) if isinstance(lb_providers, dict) else []
+    ollama_models = ollama_models_resp.get("models", []) if isinstance(ollama_models_resp, dict) else []
+
+    warm_count = sum(1 for m in models_list if m.get("is_ready"))
+    error_count = sum(1 for m in models_list if m.get("status") == "error")
+    enabled_count = sum(1 for p in provider_list if p.get("enabled"))
+    healthy_provider_count = sum(1 for ok in (lb_metrics.get("health_status", {}) or {}).values() if ok)
+
+    return {
+        "summary": {
+            "model_count": len(models_list),
+            "warm_count": warm_count,
+            "error_count": error_count,
+            "provider_count": len(provider_list),
+            "enabled_provider_count": enabled_count,
+            "healthy_provider_count": healthy_provider_count,
+            "ollama_status": ollama.get("status", "unknown"),
+            "ollama_model_count": len(ollama_models),
+        },
+        "models": models_list,
+        "providers": provider_list,
+        "load_balancer_metrics": lb_metrics,
+        "ollama": {
+            "health": ollama,
+            "models": ollama_models,
+        },
+    }
+
 def extract_quota_reason(event: Dict) -> str:
     reason = event.get("quota_reason")
     if reason:

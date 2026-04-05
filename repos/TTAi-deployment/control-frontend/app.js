@@ -9,6 +9,7 @@ let overviewData = null;
 let quotaData = null;
 let billingData = null;
 let errorsData = null;
+let modelsData = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
@@ -23,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTimeDisplay();
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -165,6 +166,9 @@ async function loadPage(page) {
                 break;
             case 'errors':
                 await loadErrors();
+                break;
+            case 'models':
+                await loadModels();
                 break;
             default:
                 pageEl.innerHTML = `
@@ -663,6 +667,131 @@ function renderBilling() {
                     }
                 </div>
             </div>
+        </div>
+    `;
+}
+
+// Models page
+async function loadModels() {
+    try {
+        const data = await fetchAPI('/control-api/models');
+        modelsData = data;
+        renderModels();
+    } catch (error) {
+        throw error;
+    }
+}
+
+function renderModels() {
+    const pageEl = document.getElementById('page-models');
+    const data = modelsData;
+    if (!data) return;
+
+    const summary = data.summary || {};
+    const models = data.models || [];
+    const providers = data.providers || [];
+    const ollamaModels = data.ollama?.models || [];
+    const healthStatus = data.load_balancer_metrics?.health_status || {};
+
+    pageEl.innerHTML = `
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Models</div>
+                <div class="kpi-title">Configured Models</div>
+                <div class="kpi-value neutral">${summary.model_count || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-robot"></i><span>Total tracked</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Warm</div>
+                <div class="kpi-title">Ready Models</div>
+                <div class="kpi-value good">${summary.warm_count || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-fire"></i><span>Warm and ready</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Providers</div>
+                <div class="kpi-title">Healthy Providers</div>
+                <div class="kpi-value ${summary.healthy_provider_count === summary.provider_count ? 'good' : 'warning'}">${summary.healthy_provider_count || 0}/${summary.provider_count || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-network-wired"></i><span>LB health status</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Ollama</div>
+                <div class="kpi-title">Local Model Store</div>
+                <div class="kpi-value ${summary.ollama_status === 'healthy' ? 'good' : 'warning'}">${(summary.ollama_status || 'unknown').toUpperCase()}</div>
+                <div class="kpi-trend"><i class="fas fa-server"></i><span>${summary.ollama_model_count || 0} local models</span></div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Model Readiness</div>
+                    <div class="panel-subtitle">Warmup state</div>
+                </div>
+                <div class="panel-content">
+                    ${models.slice(0, 6).map(model => `
+                        <div class="panel-row">
+                            <span class="panel-label">${model.name}</span>
+                            <span class="panel-value"><span class="badge ${model.is_ready ? 'badge-success' : (model.status === 'error' ? 'badge-danger' : 'badge-warning')}">${model.status || 'unknown'}</span></span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Provider Health</div>
+                    <div class="panel-subtitle">Load balancer backends</div>
+                </div>
+                <div class="panel-content">
+                    ${providers.slice(0, 6).map(provider => `
+                        <div class="panel-row">
+                            <span class="panel-label">${provider.name}</span>
+                            <span class="panel-value"><span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span></span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Ollama Models</div>
+                    <div class="panel-subtitle">Local runtime inventory</div>
+                </div>
+                <div class="panel-content">
+                    ${ollamaModels.length > 0 ? ollamaModels.slice(0, 6).map(model => `
+                        <div class="panel-row">
+                            <span class="panel-label">${model.name}</span>
+                            <span class="panel-value">${model.details?.parameter_size || '--'}</span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No local models</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container" style="margin-top: 32px;">
+            <div class="table-header">Provider Inventory</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Model</th>
+                        <th>Weight</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${providers.map(provider => `
+                        <tr>
+                            <td>${provider.name}</td>
+                            <td>${provider.type}</td>
+                            <td>${provider.model}</td>
+                            <td>${provider.weight}</td>
+                            <td><span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
     `;
 }
