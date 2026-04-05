@@ -1135,5 +1135,119 @@ from datetime import datetime
 # Control Dashboard
 from control_dashboard import collector_service
 
+# Billing summary endpoint
+@app.get("/api/admin/usage/billing-summary")
+async def admin_billing_summary(
+    limit: int = Query(default=500, ge=1, le=5000),
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    request_path: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+    quota_billable: Optional[bool] = None,
+    billing_billable: Optional[bool] = None,
+    billable_mode: Optional[str] = None,
+):
+    events = read_usage_events(limit=limit)
+    filtered = filter_usage_events(
+        events,
+        user_id=user_id,
+        status=status,
+        provider=provider,
+        model=model,
+        request_path=request_path,
+        tenant_id=tenant_id,
+        api_key_id=api_key_id,
+        quota_billable=quota_billable,
+        billing_billable=billing_billable,
+        billable_mode=billable_mode,
+    )
+    return {
+        "filters": {
+            "user_id": user_id,
+            "status": status,
+            "provider": provider,
+            "model": model,
+            "request_path": request_path,
+            "tenant_id": tenant_id,
+            "api_key_id": api_key_id,
+            "quota_billable": quota_billable,
+            "billing_billable": billing_billable,
+            "billable_mode": billable_mode,
+        },
+        "summary": summarize_billing_usage(filtered),
+    }
+
+def summarize_billing_usage(events: List[Dict]) -> Dict:
+    if not events:
+        return {
+            "total_estimated_cost": 0.0,
+            "billable_estimated_cost": 0.0,
+            "non_billable_estimated_cost": 0.0,
+            "billable_events": 0,
+            "non_billable_events": 0,
+            "billable_mode_breakdown": {},
+            "tenant_breakdown": {},
+            "api_key_breakdown": {},
+            "provider_breakdown": {},
+        }
+    
+    total_estimated_cost = 0.0
+    billable_estimated_cost = 0.0
+    non_billable_estimated_cost = 0.0
+    billable_events = 0
+    non_billable_events = 0
+    billable_mode_counts = {}
+    tenant_costs = {}
+    api_key_costs = {}
+    provider_costs = {}
+    
+    for e in events:
+        cost = e.get("estimated_cost")
+        if cost is None:
+            cost = 0.0
+        total_estimated_cost += cost
+        
+        is_billable = e.get("billing_billable", False)
+        if is_billable:
+            billable_estimated_cost += cost
+            billable_events += 1
+        else:
+            non_billable_estimated_cost += cost
+            non_billable_events += 1
+        
+        billable_mode = e.get("billable_mode", "unknown")
+        billable_mode_counts[billable_mode] = billable_mode_counts.get(billable_mode, 0) + 1
+        
+        tenant_id = e.get("tenant_id")
+        if tenant_id:
+            tenant_costs[tenant_id] = tenant_costs.get(tenant_id, 0.0) + cost
+        
+        api_key_id = e.get("api_key_id")
+        if api_key_id:
+            api_key_costs[api_key_id] = api_key_costs.get(api_key_id, 0.0) + cost
+        
+        provider = e.get("provider")
+        if provider:
+            provider_costs[provider] = provider_costs.get(provider, 0.0) + cost
+    
+    def sort_dict_by_value(d, reverse=True):
+        return dict(sorted(d.items(), key=lambda x: x[1], reverse=reverse))
+    
+    return {
+        "total_estimated_cost": round(total_estimated_cost, 6),
+        "billable_estimated_cost": round(billable_estimated_cost, 6),
+        "non_billable_estimated_cost": round(non_billable_estimated_cost, 6),
+        "billable_events": billable_events,
+        "non_billable_events": non_billable_events,
+        "billable_mode_breakdown": sort_dict_by_value(billable_mode_counts),
+        "tenant_breakdown": sort_dict_by_value(tenant_costs),
+        "api_key_breakdown": sort_dict_by_value(api_key_costs),
+        "provider_breakdown": sort_dict_by_value(provider_costs),
+    }
+
+
 
 
