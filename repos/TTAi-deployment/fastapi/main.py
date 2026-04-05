@@ -1858,11 +1858,12 @@ async def control_models():
     models_list = list(models_status.values()) if isinstance(models_status, dict) else []
     provider_list = lb_providers.get("providers", []) if isinstance(lb_providers, dict) else []
     ollama_models = ollama_models_resp.get("models", []) if isinstance(ollama_models_resp, dict) else []
+    lb_metrics_dict = lb_metrics.model_dump() if hasattr(lb_metrics, "model_dump") else (lb_metrics if isinstance(lb_metrics, dict) else {})
 
     warm_count = sum(1 for m in models_list if m.get("is_ready"))
     error_count = sum(1 for m in models_list if m.get("status") == "error")
     enabled_count = sum(1 for p in provider_list if p.get("enabled"))
-    healthy_provider_count = sum(1 for ok in (lb_metrics.get("health_status", {}) or {}).values() if ok)
+    healthy_provider_count = sum(1 for ok in (lb_metrics_dict.get("health_status", {}) or {}).values() if ok)
 
     return {
         "summary": {
@@ -1877,7 +1878,7 @@ async def control_models():
         },
         "models": models_list,
         "providers": provider_list,
-        "load_balancer_metrics": lb_metrics,
+        "load_balancer_metrics": lb_metrics_dict,
         "ollama": {
             "health": ollama,
             "models": ollama_models,
