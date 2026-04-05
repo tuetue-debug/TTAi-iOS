@@ -27,9 +27,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
-USAGE_EVENTS_PATH = BASE_DIR / "data" / "usage_events.jsonl"
-BILLING_CONFIG_PATH = BASE_DIR / "data" / "billing_config.json"
+DATA_DIR = BASE_DIR / "data"
+USAGE_EVENTS_PATH = DATA_DIR / "usage_events.jsonl"
+BILLING_CONFIG_PATH = DATA_DIR / "billing_config.json"
+LEARN_QUEUE_PATH = DATA_DIR / "learn_queue.jsonl"
+ARCHIVE_DIR = DATA_DIR / "archive"
 USAGE_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
 def estimate_tokens(text: str) -> int:
     if not text:
@@ -508,6 +512,48 @@ class ControlActionRequest(BaseModel):
     action: str
     target: Optional[str] = None
     timeout: int = 30
+
+
+def clear_learn_queue_file() -> Dict:
+    if not LEARN_QUEUE_PATH.exists():
+        return {"ok": True, "message": "Learn queue already empty", "cleared_items": 0}
+
+    existing_lines = LEARN_QUEUE_PATH.read_text(encoding="utf-8").splitlines()
+    cleared_items = len([line for line in existing_lines if line.strip()])
+    if cleared_items == 0:
+        LEARN_QUEUE_PATH.write_text("", encoding="utf-8")
+        return {"ok": True, "message": "Learn queue already empty", "cleared_items": 0}
+
+    backup_path = ARCHIVE_DIR / f"learn_queue_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.jsonl.bak"
+    backup_path.write_text("\n".join(existing_lines) + ("\n" if existing_lines else ""), encoding="utf-8")
+    LEARN_QUEUE_PATH.write_text("", encoding="utf-8")
+    return {
+        "ok": True,
+        "message": f"Cleared {cleared_items} learn queue items",
+        "cleared_items": cleared_items,
+        "backup_path": str(backup_path),
+    }
+
+
+def archive_usage_events_file() -> Dict:
+    if not USAGE_EVENTS_PATH.exists() or USAGE_EVENTS_PATH.stat().st_size == 0:
+        return {"ok": True, "message": "No usage events to archive", "archived_lines": 0}
+
+    existing_lines = USAGE_EVENTS_PATH.read_text(encoding="utf-8").splitlines()
+    archived_lines = len([line for line in existing_lines if line.strip()])
+    if archived_lines == 0:
+        USAGE_EVENTS_PATH.write_text("", encoding="utf-8")
+        return {"ok": True, "message": "No usage events to archive", "archived_lines": 0}
+
+    archive_path = ARCHIVE_DIR / f"usage_events_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.jsonl"
+    archive_path.write_text("\n".join(existing_lines) + ("\n" if existing_lines else ""), encoding="utf-8")
+    USAGE_EVENTS_PATH.write_text("", encoding="utf-8")
+    return {
+        "ok": True,
+        "message": f"Archived {archived_lines} usage events",
+        "archived_lines": archived_lines,
+        "archive_path": str(archive_path),
+    }
 
 @app.get("/control-login", response_class=HTMLResponse)
 async def control_login_page():
@@ -2138,7 +2184,7 @@ async def control_session_state(current_user = Depends(get_current_control_user)
         "available_actions": {
             "providers": ["enable", "disable"],
             "models": ["warmup_one", "warmup_all"],
-            "system": ["health_refresh"],
+            "system": ["health_refresh", "clear_learn_queue", "archive_events"],
         },
     }
 
@@ -2201,9 +2247,16 @@ async def control_run_action(payload: ControlActionRequest, current_user = Depen
         elif action == "health_refresh":
             result = {
                 "ok": True,
+                "message": "Health snapshot refreshed",
                 "health": await health(),
                 "health_detailed": await health_detailed(),
             }
+
+        elif action == "clear_learn_queue":
+            result = clear_learn_queue_file()
+
+        elif action == "archive_events":
+            result = archive_usage_events_file()
 
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported control action: {action}")
