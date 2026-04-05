@@ -18,6 +18,7 @@ const navItems = document.querySelectorAll('.nav-item');
 const pages = document.querySelectorAll('.page');
 const pageTitle = document.querySelector('.page-title');
 const refreshBtn = document.getElementById('refresh-btn');
+const logoutBtn = document.getElementById('logout-btn');
 const currentTimeEl = document.getElementById('current-time');
 
 // Initialize
@@ -43,6 +44,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     refreshBtn.addEventListener('click', () => {
         refreshCurrentPage();
+    });
+
+    logoutBtn?.addEventListener('click', async () => {
+        try {
+            await fetchAPI('/control-auth/logout', { method: 'POST' });
+        } catch (error) {
+            console.warn('Logout request failed', error);
+        }
+        window.location.href = '/control-login';
     });
 });
 
