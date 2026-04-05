@@ -1910,6 +1910,36 @@ async def control_system():
         "alerts": alerts,
     }
 
+@app.get("/control-api/usage")
+async def control_usage(limit: int = Query(default=20, ge=5, le=100)):
+    summary_response = await admin_usage_summary(limit=500)
+    events_response = await admin_usage_events(limit=limit)
+
+    summary = summary_response.get("summary", {}) if isinstance(summary_response, dict) else {}
+    events = events_response.get("events", []) if isinstance(events_response, dict) else []
+
+    top_users = summary.get("top_users", []) if isinstance(summary, dict) else []
+    top_providers = summary.get("top_providers", []) if isinstance(summary, dict) else []
+    top_provider_types = summary.get("top_provider_types", []) if isinstance(summary, dict) else []
+    status_breakdown = summary.get("status_breakdown", {}) if isinstance(summary, dict) else {}
+
+    return {
+        "summary": summary,
+        "highlights": {
+            "total_events": summary.get("total_events", 0),
+            "success_events": summary.get("success_events", 0),
+            "error_events": summary.get("error_events", 0),
+            "fallback_events": summary.get("fallback_events", 0),
+            "total_tokens_est": summary.get("total_tokens_est", 0),
+            "avg_processing_time": summary.get("avg_processing_time", 0),
+            "top_user": top_users[0] if top_users else None,
+            "top_provider": top_providers[0] if top_providers else None,
+            "top_provider_type": top_provider_types[0] if top_provider_types else None,
+            "top_status": next(iter(status_breakdown.items())) if status_breakdown else None,
+        },
+        "recent_events": events,
+    }
+
 def extract_quota_reason(event: Dict) -> str:
     reason = event.get("quota_reason")
     if reason:

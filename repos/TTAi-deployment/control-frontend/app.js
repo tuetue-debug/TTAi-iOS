@@ -11,6 +11,7 @@ let billingData = null;
 let errorsData = null;
 let modelsData = null;
 let systemData = null;
+let usageData = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
@@ -25,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTimeDisplay();
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -173,6 +174,9 @@ async function loadPage(page) {
                 break;
             case 'system':
                 await loadSystem();
+                break;
+            case 'usage':
+                await loadUsage();
                 break;
             default:
                 pageEl.innerHTML = `
@@ -935,6 +939,134 @@ function renderSystem() {
                             <td>${formatLatency(info.last_latency_ms)}</td>
                         </tr>
                     `).join('') : '<tr><td colspan="4">No backend activity yet</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Usage page
+async function loadUsage() {
+    try {
+        const data = await fetchAPI('/control-api/usage?limit=20');
+        usageData = data;
+        renderUsage();
+    } catch (error) {
+        throw error;
+    }
+}
+
+function renderUsage() {
+    const pageEl = document.getElementById('page-usage');
+    const data = usageData;
+    if (!data) return;
+
+    const summary = data.summary || {};
+    const highlights = data.highlights || {};
+    const recentEvents = data.recent_events || [];
+    const topUsers = summary.top_users || [];
+    const topProviders = summary.top_providers || [];
+    const statusBreakdown = summary.status_breakdown || {};
+
+    pageEl.innerHTML = `
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Usage</div>
+                <div class="kpi-title">Total Events</div>
+                <div class="kpi-value neutral">${highlights.total_events || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-chart-bar"></i><span>Ledger events</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Success</div>
+                <div class="kpi-title">Successful Calls</div>
+                <div class="kpi-value good">${highlights.success_events || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-check-circle"></i><span>Processed successfully</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Errors</div>
+                <div class="kpi-title">Error Events</div>
+                <div class="kpi-value ${(highlights.error_events || 0) > 0 ? 'warning' : 'good'}">${highlights.error_events || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-exclamation-triangle"></i><span>Needs review</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Tokens</div>
+                <div class="kpi-title">Estimated Tokens</div>
+                <div class="kpi-value neutral">${Number(highlights.total_tokens_est || 0).toLocaleString('en-US')}</div>
+                <div class="kpi-trend"><i class="fas fa-microchip"></i><span>Approximate load</span></div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Top Users</div>
+                    <div class="panel-subtitle">Highest request volume</div>
+                </div>
+                <div class="panel-content">
+                    ${topUsers.length > 0 ? topUsers.slice(0, 6).map(([user, count]) => `
+                        <div class="panel-row">
+                            <span class="panel-label">${formatShortLabel(user, 24)}</span>
+                            <span class="panel-value">${count}</span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No user data</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Top Providers</div>
+                    <div class="panel-subtitle">Most selected backends</div>
+                </div>
+                <div class="panel-content">
+                    ${topProviders.length > 0 ? topProviders.slice(0, 6).map(([provider, count]) => `
+                        <div class="panel-row">
+                            <span class="panel-label">${formatShortLabel(provider, 28)}</span>
+                            <span class="panel-value">${count}</span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No provider data</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Status Breakdown</div>
+                    <div class="panel-subtitle">Outcome distribution</div>
+                </div>
+                <div class="panel-content">
+                    ${Object.entries(statusBreakdown).length > 0 ? Object.entries(statusBreakdown).slice(0, 6).map(([status, count]) => `
+                        <div class="panel-row">
+                            <span class="panel-label">${status}</span>
+                            <span class="panel-value"><span class="badge ${getStatusTone(status)}">${count}</span></span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No status data</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container" style="margin-top: 32px;">
+            <div class="table-header">Recent Usage Events</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Status</th>
+                        <th>Tokens</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${recentEvents.length > 0 ? recentEvents.map(event => `
+                        <tr>
+                            <td>${formatTimestamp(event.timestamp)}</td>
+                            <td>${formatShortLabel(event.user_id, 20)}</td>
+                            <td>${formatShortLabel(event.provider || event.provider_type || '--', 24)}</td>
+                            <td>${formatShortLabel(event.model, 24)}</td>
+                            <td><span class="badge ${getStatusTone(event.status)}">${event.status || '--'}</span></td>
+                            <td>${Number(event.total_tokens_est || 0).toLocaleString('en-US')}</td>
+                        </tr>
+                    `).join('') : '<tr><td colspan="6">No recent events</td></tr>'}
                 </tbody>
             </table>
         </div>
