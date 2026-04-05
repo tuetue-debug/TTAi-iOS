@@ -511,6 +511,7 @@ API_V1_ADMIN_USAGE_EVENTS = "/api/v1/admin/usage/events"
 API_V1_ADMIN_USAGE_SUMMARY = "/api/v1/admin/usage/summary"
 API_V1_ADMIN_USAGE_USER = "/api/v1/admin/usage/users/{target_user_id}"
 API_V1_ADMIN_USAGE_BILLING_SUMMARY = "/api/v1/admin/usage/billing-summary"
+API_V1_ADMIN_OVERVIEW = "/api/v1/admin/overview"
 API_V1_ADMIN_BILLING_CONFIG = "/api/v1/admin/billing/config"
 API_V1_ADMIN_QUOTA_STATUS = "/api/v1/admin/quota/status"
 API_V1_ADMIN_QUOTA_STATUS_USER = "/api/v1/admin/quota/status/users/{target_user_id}"
@@ -1520,6 +1521,74 @@ async def admin_billing_summary(
             "billable_mode": billable_mode,
         },
         "summary": summarize_billing_usage(filtered),
+    }
+
+@app.get(API_V1_ADMIN_OVERVIEW)
+async def admin_overview(
+    usage_limit: int = Query(default=200, ge=1, le=5000),
+    recent_events_limit: int = Query(default=20, ge=1, le=100),
+    current_user = Depends(get_current_admin_user),
+):
+    recent_events = read_usage_events(limit=usage_limit)
+    usage_summary = summarize_usage_events(recent_events)
+    billing_summary = summarize_billing_usage(recent_events)
+    health_summary = await health()
+    detailed_health = await health_detailed()
+
+    blocked_events = [
+        event for event in recent_events
+        if event.get("status") == "quota_exceeded" or event.get("http_status") == 429
+    ]
+
+    recent_errors = [
+        {
+            "timestamp": event.get("timestamp"),
+            "request_id": event.get("request_id"),
+            "provider": event.get("provider"),
+            "model": event.get("model"),
+            "status": event.get("status"),
+            "http_status": event.get("http_status"),
+            "error": event.get("error"),
+        }
+        for event in recent_events
+        if event.get("status") not in (None, "success")
+    ][:recent_events_limit]
+
+    quota_highlights = {
+        "blocked_event_count": len(blocked_events),
+        "recent_blocked": [
+            {
+                "timestamp": event.get("timestamp"),
+                "user_id": event.get("user_id"),
+                "tenant_id": event.get("tenant_id"),
+                "api_key_id": event.get("api_key_id"),
+                "reason": event.get("error") or event.get("status"),
+            }
+            for event in blocked_events[:recent_events_limit]
+        ],
+    }
+
+    return {
+        "health": {
+            "summary": health_summary,
+            "detailed": {
+                "ollama": detailed_health.get("ollama"),
+                "load_balancer": detailed_health.get("load_balancer"),
+                "system": detailed_health.get("system"),
+            },
+        },
+        "usage": {
+            "summary": usage_summary,
+            "recent_events": recent_events[:recent_events_limit],
+            "window_event_count": len(recent_events),
+        },
+        "billing": {
+            "summary": billing_summary,
+        },
+        "quota": quota_highlights,
+        "alerts": {
+            "recent_errors": recent_errors,
+        },
     }
 
 # Billing config management endpoints
