@@ -555,6 +555,59 @@ def archive_usage_events_file() -> Dict:
         "archive_path": str(archive_path),
     }
 
+
+CONTROL_ACTION_DEFINITIONS = {
+    "provider_enable": {
+        "group": "providers",
+        "requires_target": True,
+        "sensitivity": "medium",
+        "label": "Enable Provider",
+    },
+    "provider_disable": {
+        "group": "providers",
+        "requires_target": True,
+        "sensitivity": "high",
+        "label": "Disable Provider",
+    },
+    "model_warmup": {
+        "group": "models",
+        "requires_target": True,
+        "sensitivity": "low",
+        "label": "Warm Up Model",
+    },
+    "model_warmup_all": {
+        "group": "models",
+        "requires_target": False,
+        "sensitivity": "medium",
+        "label": "Warm Up All Models",
+    },
+    "health_refresh": {
+        "group": "system",
+        "requires_target": False,
+        "sensitivity": "low",
+        "label": "Refresh Health",
+    },
+    "clear_learn_queue": {
+        "group": "system",
+        "requires_target": False,
+        "sensitivity": "high",
+        "label": "Clear Learn Queue",
+    },
+    "archive_events": {
+        "group": "system",
+        "requires_target": False,
+        "sensitivity": "medium",
+        "label": "Archive Usage Events",
+    },
+}
+
+
+def get_available_control_actions() -> Dict[str, List[Dict]]:
+    grouped: Dict[str, List[Dict]] = {"providers": [], "models": [], "system": []}
+    for action_name, meta in CONTROL_ACTION_DEFINITIONS.items():
+        grouped.setdefault(meta["group"], []).append({"action": action_name, **meta})
+    return grouped
+
 @app.get("/control-login", response_class=HTMLResponse)
 async def control_login_page():
     return CONTROL_LOGIN_HTML
@@ -2181,11 +2234,7 @@ async def control_session_state(current_user = Depends(get_current_control_user)
         "ok": True,
         "user": current_user,
         "cookie_secure": should_use_secure_cookie(),
-        "available_actions": {
-            "providers": ["enable", "disable"],
-            "models": ["warmup_one", "warmup_all"],
-            "system": ["health_refresh", "clear_learn_queue", "archive_events"],
-        },
+        "available_actions": get_available_control_actions(),
     }
 
 
@@ -2202,6 +2251,7 @@ async def control_run_action(payload: ControlActionRequest, current_user = Depen
     target = (payload.target or "").strip()
     timestamp = datetime.utcnow().isoformat() + "Z"
 
+    action_meta = CONTROL_ACTION_DEFINITIONS.get(action)
     action_record = {
         "timestamp": timestamp,
         "actor": current_user.get("username", "admin"),
@@ -2209,28 +2259,29 @@ async def control_run_action(payload: ControlActionRequest, current_user = Depen
         "action": action,
         "target": target or None,
         "timeout": payload.timeout,
+        "sensitivity": action_meta.get("sensitivity") if action_meta else "unknown",
     }
 
     try:
+        if not action_meta:
+            raise HTTPException(status_code=400, detail=f"Unsupported control action: {action}")
+
+        if action_meta.get("requires_target") and not target:
+            raise HTTPException(status_code=400, detail=f"target is required for {action}")
+
         if action == "provider_enable":
-            if not target:
-                raise HTTPException(status_code=400, detail="target is required for provider_enable")
             success = load_balancer.enable_provider(target)
             if not success:
                 raise HTTPException(status_code=404, detail=f"Provider {target} not found")
             result = {"ok": True, "message": f"Provider {target} enabled"}
 
         elif action == "provider_disable":
-            if not target:
-                raise HTTPException(status_code=400, detail="target is required for provider_disable")
             success = load_balancer.disable_provider(target)
             if not success:
                 raise HTTPException(status_code=404, detail=f"Provider {target} not found")
             result = {"ok": True, "message": f"Provider {target} disabled"}
 
         elif action == "model_warmup":
-            if not target:
-                raise HTTPException(status_code=400, detail="target is required for model_warmup")
             success = await model_manager.warmup_model(target, payload.timeout)
             if not success:
                 raise HTTPException(status_code=500, detail=f"Failed to warm up model {target}")
@@ -2257,9 +2308,6 @@ async def control_run_action(payload: ControlActionRequest, current_user = Depen
 
         elif action == "archive_events":
             result = archive_usage_events_file()
-
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported control action: {action}")
 
         action_record["status"] = "success"
         action_record["result"] = result.get("message") or "ok"
