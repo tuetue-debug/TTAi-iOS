@@ -1887,9 +1887,9 @@ async def control_models():
 
 @app.get("/control-api/system")
 async def control_system():
-    health_summary = collector_service.health_summary()
-    workloads = collector_service.workloads()
-    alerts = collector_service.alerts()
+    health_summary = await collector_service.health_summary()
+    workloads = await collector_service.workloads()
+    alerts = await collector_service.alerts()
 
     nodes = health_summary.get("nodes", []) if isinstance(health_summary, dict) else []
     alerts_list = alerts.get("alerts", []) if isinstance(alerts, dict) else []
