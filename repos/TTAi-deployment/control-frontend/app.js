@@ -240,6 +240,26 @@ function formatErrorSignature(value) {
     return `${status} · ${httpStatus} · ${provider} · ${formatShortLabel(model, 28)} · ${formatShortLabel(message, 72)}`;
 }
 
+function getStatusTone(status) {
+    const value = String(status || '').toLowerCase();
+    if (['healthy', 'ok', 'ready', 'active', 'up', 'success', 'clear'].includes(value)) return 'badge-success';
+    if (['critical', 'error', 'down', 'offline', 'failed', 'unhealthy'].includes(value)) return 'badge-danger';
+    if (['degraded', 'warning', 'warm', 'pending', 'unknown'].includes(value)) return 'badge-warning';
+    return 'badge-default';
+}
+
+function formatLatency(value) {
+    const num = Number(value);
+    if (Number.isNaN(num)) return '--';
+    return `${num.toFixed(num >= 100 ? 0 : 1)} ms`;
+}
+
+function formatKeyValuePairs(obj) {
+    const entries = Object.entries(obj || {});
+    if (!entries.length) return '--';
+    return entries.map(([k, v]) => `${k}:${v}`).join(', ');
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -714,7 +734,7 @@ function renderModels() {
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Providers</div>
                 <div class="kpi-title">Healthy Providers</div>
-                <div class="kpi-value ${summary.healthy_provider_count === summary.provider_count ? 'good' : 'warning'}">${summary.healthy_provider_count || 0}/${summary.provider_count || 0}</div>
+                <div class="kpi-value ${summary.provider_count > 0 && summary.healthy_provider_count === summary.provider_count ? 'good' : 'warning'}">${summary.healthy_provider_count || 0}/${summary.provider_count || 0}</div>
                 <div class="kpi-trend"><i class="fas fa-network-wired"></i><span>LB health status</span></div>
             </div>
             <div class="kpi-card">
@@ -732,12 +752,12 @@ function renderModels() {
                     <div class="panel-subtitle">Warmup state</div>
                 </div>
                 <div class="panel-content">
-                    ${models.slice(0, 6).map(model => `
+                    ${models.length > 0 ? models.slice(0, 6).map(model => `
                         <div class="panel-row">
                             <span class="panel-label">${model.name}</span>
-                            <span class="panel-value"><span class="badge ${model.is_ready ? 'badge-success' : (model.status === 'error' ? 'badge-danger' : 'badge-warning')}">${model.status || 'unknown'}</span></span>
+                            <span class="panel-value"><span class="badge ${model.is_ready ? 'badge-success' : getStatusTone(model.status)}">${model.status || 'unknown'}</span></span>
                         </div>
-                    `).join('')}
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No model data</span><span class="panel-value">--</span></div>'}
                 </div>
             </div>
 
@@ -747,12 +767,12 @@ function renderModels() {
                     <div class="panel-subtitle">Load balancer backends</div>
                 </div>
                 <div class="panel-content">
-                    ${providers.slice(0, 6).map(provider => `
+                    ${providers.length > 0 ? providers.slice(0, 6).map(provider => `
                         <div class="panel-row">
                             <span class="panel-label">${provider.name}</span>
                             <span class="panel-value"><span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span></span>
                         </div>
-                    `).join('')}
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No provider data</span><span class="panel-value">--</span></div>'}
                 </div>
             </div>
 
@@ -827,7 +847,7 @@ function renderSystem() {
             <div class="kpi-card">
                 <div class="kpi-eyebrow">System</div>
                 <div class="kpi-title">Overall Status</div>
-                <div class="kpi-value ${summary.overall_status === 'healthy' ? 'good' : 'warning'}">${String(summary.overall_status || 'unknown').toUpperCase()}</div>
+                <div class="kpi-value ${summary.overall_status === 'healthy' ? 'good' : (summary.overall_status === 'degraded' ? 'warning' : 'neutral')}">${String(summary.overall_status || 'unknown').toUpperCase()}</div>
                 <div class="kpi-trend"><i class="fas fa-heartbeat"></i><span>Collector summary</span></div>
             </div>
             <div class="kpi-card">
@@ -857,12 +877,12 @@ function renderSystem() {
                     <div class="panel-subtitle">Service groups</div>
                 </div>
                 <div class="panel-content">
-                    ${nodes.map(node => `
+                    ${nodes.length > 0 ? nodes.map(node => `
                         <div class="panel-row">
                             <span class="panel-label">${node.label} (${node.location})</span>
-                            <span class="panel-value"><span class="badge ${node.status === 'healthy' ? 'badge-success' : 'badge-warning'}">${node.status}</span></span>
+                            <span class="panel-value"><span class="badge ${getStatusTone(node.status)}">${node.status || 'unknown'}</span></span>
                         </div>
-                    `).join('')}
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No node data</span><span class="panel-value">--</span></div>'}
                 </div>
             </div>
 
@@ -888,7 +908,7 @@ function renderSystem() {
                     ${alerts.length > 0 ? alerts.slice(0, 6).map(alert => `
                         <div class="panel-row">
                             <span class="panel-label">${alert.message || 'Alert'}</span>
-                            <span class="panel-value"><span class="badge ${alert.severity === 'critical' ? 'badge-danger' : 'badge-warning'}">${alert.severity || 'info'}</span></span>
+                            <span class="panel-value"><span class="badge ${getStatusTone(alert.severity)}">${alert.severity || 'info'}</span></span>
                         </div>
                     `).join('') : '<div class="panel-row"><span class="panel-label">No active alerts</span><span class="panel-value"><span class="badge badge-success">clear</span></span></div>'}
                 </div>
@@ -907,14 +927,14 @@ function renderSystem() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${Object.entries(lbSummary).map(([backend, info]) => `
+                    ${Object.entries(lbSummary).length > 0 ? Object.entries(lbSummary).map(([backend, info]) => `
                         <tr>
                             <td>${backend}</td>
-                            <td>${Object.entries(info.counts || {}).map(([k,v]) => `${k}:${v}`).join(', ') || '--'}</td>
-                            <td>${info.avg_latency_ms ?? '--'} ms</td>
-                            <td>${info.last_latency_ms ?? '--'} ms</td>
+                            <td>${formatKeyValuePairs(info.counts)}</td>
+                            <td>${formatLatency(info.avg_latency_ms)}</td>
+                            <td>${formatLatency(info.last_latency_ms)}</td>
                         </tr>
-                    `).join('')}
+                    `).join('') : '<tr><td colspan="4">No backend activity yet</td></tr>'}
                 </tbody>
             </table>
         </div>
