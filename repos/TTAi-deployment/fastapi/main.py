@@ -60,6 +60,7 @@ def summarize_usage_events(events: List[Dict]) -> Dict:
     providers = Counter(e.get("provider") or "unknown" for e in events)
     provider_types = Counter(e.get("provider_type") or "unknown" for e in events)
     users = Counter(e.get("user_id") or "anonymous" for e in events)
+    statuses = Counter(e.get("status") or "unknown" for e in events)
     return {
         "total_events": total,
         "success_events": success,
@@ -70,7 +71,30 @@ def summarize_usage_events(events: List[Dict]) -> Dict:
         "top_providers": providers.most_common(10),
         "top_provider_types": provider_types.most_common(10),
         "top_users": users.most_common(10),
+        "status_breakdown": dict(statuses),
     }
+
+
+def filter_usage_events(
+    events: List[Dict],
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    request_path: Optional[str] = None,
+):
+    filtered = events
+    if user_id:
+        filtered = [e for e in filtered if (e.get("user_id") or "") == user_id]
+    if status:
+        filtered = [e for e in filtered if (e.get("status") or "") == status]
+    if provider:
+        filtered = [e for e in filtered if (e.get("provider") or "") == provider]
+    if model:
+        filtered = [e for e in filtered if (e.get("model") or "") == model]
+    if request_path:
+        filtered = [e for e in filtered if (e.get("request_path") or "") == request_path]
+    return filtered
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -552,6 +576,99 @@ async def chat(request: ChatRequest):
         write_usage_event(usage_event)
         logger.error(f"Chat processing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+# Admin usage metering read endpoints
+@app.get("/api/admin/usage/events")
+async def admin_usage_events(
+    limit: int = Query(default=100, ge=1, le=1000),
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    request_path: Optional[str] = None,
+):
+    events = read_usage_events(limit=1000)
+    filtered = filter_usage_events(
+        events,
+        user_id=user_id,
+        status=status,
+        provider=provider,
+        model=model,
+        request_path=request_path,
+    )
+    return {
+        "count": min(len(filtered), limit),
+        "filters": {
+            "user_id": user_id,
+            "status": status,
+            "provider": provider,
+            "model": model,
+            "request_path": request_path,
+        },
+        "events": filtered[:limit],
+    }
+
+
+@app.get("/api/admin/usage/summary")
+async def admin_usage_summary(
+    limit: int = Query(default=500, ge=1, le=5000),
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    request_path: Optional[str] = None,
+):
+    events = read_usage_events(limit=limit)
+    filtered = filter_usage_events(
+        events,
+        user_id=user_id,
+        status=status,
+        provider=provider,
+        model=model,
+        request_path=request_path,
+    )
+    return {
+        "filters": {
+            "user_id": user_id,
+            "status": status,
+            "provider": provider,
+            "model": model,
+            "request_path": request_path,
+        },
+        "summary": summarize_usage_events(filtered),
+    }
+
+
+@app.get("/api/admin/usage/users/{target_user_id}")
+async def admin_usage_by_user(
+    target_user_id: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    request_path: Optional[str] = None,
+):
+    events = read_usage_events(limit=1000)
+    filtered = filter_usage_events(
+        events,
+        user_id=target_user_id,
+        status=status,
+        provider=provider,
+        model=model,
+        request_path=request_path,
+    )
+    return {
+        "user_id": target_user_id,
+        "count": min(len(filtered), limit),
+        "filters": {
+            "status": status,
+            "provider": provider,
+            "model": model,
+            "request_path": request_path,
+        },
+        "summary": summarize_usage_events(filtered),
+        "events": filtered[:limit],
+    }
 
 # Query Classification endpoints
 @app.post("/api/classify", response_model=ClassificationResponse)
