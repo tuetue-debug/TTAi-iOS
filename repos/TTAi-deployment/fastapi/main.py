@@ -1631,7 +1631,7 @@ async def admin_errors_summary(
             "model": event.get("model"),
             "status": event.get("status"),
             "http_status": event.get("http_status"),
-            "error": event.get("error"),
+            "error": extract_error_message(event),
         }
         for event in error_events[:top_n]
     ]
@@ -1716,7 +1716,7 @@ async def control_overview(
             "model": event.get("model"),
             "status": event.get("status"),
             "http_status": event.get("http_status"),
-            "error": event.get("error"),
+            "error": extract_error_message(event),
         }
         for event in recent_events
         if event.get("status") not in (None, "success")
@@ -1841,7 +1841,7 @@ async def control_errors(
                 "model": event.get("model"),
                 "status": event.get("status"),
                 "http_status": event.get("http_status"),
-                "error": event.get("error"),
+                "error": extract_error_message(event),
             }
             for event in error_events[:top_n]
         ],
@@ -1873,6 +1873,31 @@ def extract_quota_reason(event: Dict) -> str:
         return str(status)
 
     return "unknown"
+
+
+def extract_error_message(event: Dict) -> str:
+    error_value = event.get("error")
+    if isinstance(error_value, dict):
+        nested_reason = error_value.get("reason") or error_value.get("error")
+        if nested_reason:
+            return str(nested_reason)
+        return json.dumps(error_value, ensure_ascii=False)
+
+    if error_value:
+        error_text = str(error_value)
+        if "max_requests_exceeded" in error_text:
+            return "max_requests_exceeded"
+        if "max_tokens_est_exceeded" in error_text:
+            return "max_tokens_est_exceeded"
+        if "max_estimated_cost_exceeded" in error_text:
+            return "max_estimated_cost_exceeded"
+        return error_text
+
+    status = event.get("status")
+    if status and status != "success":
+        return str(status)
+
+    return "Unknown error"
 
 # Billing config management endpoints
 @app.get("/api/admin/billing/config")

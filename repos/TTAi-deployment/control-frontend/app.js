@@ -21,7 +21,21 @@ const currentTimeEl = document.getElementById('current-time');
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
     initTimeDisplay();
-    loadPage(currentPage);
+
+    const initialHashPage = (window.location.hash || '#overview').replace('#', '');
+    const allowedPages = ['overview', 'quota', 'billing', 'errors'];
+    if (allowedPages.includes(initialHashPage)) {
+        switchPage(initialHashPage);
+    } else {
+        loadPage(currentPage);
+    }
+
+    window.addEventListener('hashchange', () => {
+        const hashPage = (window.location.hash || '#overview').replace('#', '');
+        if (allowedPages.includes(hashPage) && hashPage !== currentPage) {
+            switchPage(hashPage);
+        }
+    });
     
     refreshBtn.addEventListener('click', () => {
         refreshCurrentPage();
@@ -44,6 +58,8 @@ function initNavigation() {
 }
 
 function switchPage(page) {
+    window.location.hash = page;
+
     // Update active nav item
     navItems.forEach(item => {
         item.classList.remove('active');
