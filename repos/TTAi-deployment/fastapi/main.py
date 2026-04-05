@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, HTTPException, Depends
+﻿from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -6,6 +6,7 @@ import httpx
 import json
 import logging
 import uuid
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -34,6 +35,42 @@ def estimate_tokens(text: str) -> int:
 def write_usage_event(event: Dict):
     with open(USAGE_EVENTS_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+def read_usage_events(limit: int = 100) -> List[Dict]:
+    if not USAGE_EVENTS_PATH.exists():
+        return []
+    lines = USAGE_EVENTS_PATH.read_text(encoding="utf-8").splitlines()
+    events = []
+    for line in lines[-limit:]:
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return list(reversed(events))
+
+
+def summarize_usage_events(events: List[Dict]) -> Dict:
+    total = len(events)
+    success = sum(1 for e in events if e.get("status") == "success")
+    fallbacks = sum(1 for e in events if e.get("fallback_used"))
+    total_tokens = sum(int(e.get("total_tokens_est") or 0) for e in events)
+    avg_latency = round(sum(float(e.get("processing_time") or 0) for e in events) / total, 3) if total else 0
+    providers = Counter(e.get("provider") or "unknown" for e in events)
+    provider_types = Counter(e.get("provider_type") or "unknown" for e in events)
+    users = Counter(e.get("user_id") or "anonymous" for e in events)
+    return {
+        "total_events": total,
+        "success_events": success,
+        "error_events": total - success,
+        "fallback_events": fallbacks,
+        "total_tokens_est": total_tokens,
+        "avg_processing_time": avg_latency,
+        "top_providers": providers.most_common(10),
+        "top_provider_types": provider_types.most_common(10),
+        "top_users": users.most_common(10),
+    }
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -712,6 +749,25 @@ async def get_control_dashboard_providers(current_user = Depends(get_current_adm
 async def get_control_dashboard_root(current_user = Depends(get_current_admin_user)):
     """Main control dashboard endpoint - returns health-summary by default"""
     return await get_control_dashboard_health_summary(current_user)
+
+@app.get("/api/v1/admin/usage/events")
+async def get_usage_events(limit: int = Query(50, ge=1, le=500), current_user = Depends(get_current_admin_user)):
+    """Read latest local usage events from phase-1 JSONL ledger"""
+    return {
+        "events": read_usage_events(limit),
+        "count": len(read_usage_events(limit)),
+        "source": str(USAGE_EVENTS_PATH)
+    }
+
+@app.get("/api/v1/admin/usage/summary")
+async def get_usage_summary(limit: int = Query(200, ge=1, le=2000), current_user = Depends(get_current_admin_user)):
+    """Get lightweight usage summary from phase-1 JSONL ledger"""
+    events = read_usage_events(limit)
+    return {
+        "summary": summarize_usage_events(events),
+        "source": str(USAGE_EVENTS_PATH),
+        "window_event_count": len(events)
+    }
 
 async def test_loadbalancer():
     """Test load balancer with sample classifications"""
