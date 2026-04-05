@@ -377,6 +377,54 @@ body {
     border-bottom: none;
 }
 
+.panel-row-stack {
+    align-items: center;
+}
+
+.panel-meta {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.panel-actions-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.btn-mini {
+    background-color: rgba(59, 130, 246, 0.16);
+    color: var(--accent-blue);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn-mini:hover {
+    background-color: rgba(59, 130, 246, 0.24);
+}
+
+.btn-mini-danger {
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.35);
+    background-color: rgba(239, 68, 68, 0.14);
+}
+
+.btn-mini-danger:hover {
+    background-color: rgba(239, 68, 68, 0.22);
+}
+
+.btn-mini:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 .panel-label {
     color: var(--text-secondary);
     flex: 1;
@@ -477,6 +525,15 @@ body {
     font-size: 48px;
     margin-bottom: 20px;
     opacity: 0.5;
+}
+
+.table-loading {
+    padding: 20px;
+    color: var(--text-secondary);
+}
+
+.compact-empty {
+    padding: 24px 20px;
 }
 
 /* Error state */

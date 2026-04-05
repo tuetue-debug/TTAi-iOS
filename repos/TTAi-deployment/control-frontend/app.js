@@ -234,6 +234,48 @@ async function runControlAction(action, target = null, timeout = 30) {
     });
 }
 
+async function loadControlActionHistory() {
+    const container = document.getElementById('models-actions-history');
+    if (!container) return;
+
+    try {
+        const data = await fetchAPI('/control-api/actions?limit=12');
+        const actions = data.actions || [];
+
+        if (!actions.length) {
+            container.innerHTML = '<div class="empty-state compact-empty">No control actions recorded yet.</div>';
+            return;
+        }
+
+        container.innerHTML = `
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Target</th>
+                        <th>Status</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${actions.map(item => `
+                        <tr>
+                            <td>${formatTimestamp(item.timestamp)}</td>
+                            <td>${item.action || '--'}</td>
+                            <td>${formatShortLabel(item.target || '--', 24)}</td>
+                            <td><span class="badge ${getStatusTone(item.status)}">${item.status || '--'}</span></td>
+                            <td>${formatShortLabel(item.result || '--', 64)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (error) {
+        container.innerHTML = `<div class="error-state compact-empty">Failed to load control action history: ${error.message}</div>`;
+    }
+}
+
 function formatTimestamp(value) {
     if (!value) return '--';
     const date = new Date(value);
@@ -794,6 +836,17 @@ function renderModels() {
     const healthStatus = data.load_balancer_metrics?.health_status || {};
 
     pageEl.innerHTML = `
+        <div class="action-bar">
+            <button class="btn-refresh" id="models-refresh-actions-btn">
+                <i class="fas fa-rotate"></i>
+                Refresh Models View
+            </button>
+            <button class="btn-refresh" id="models-warmup-all-btn">
+                <i class="fas fa-fire"></i>
+                Warm Up All Models
+            </button>
+        </div>
+
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Models</div>
@@ -825,13 +878,19 @@ function renderModels() {
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Model Readiness</div>
-                    <div class="panel-subtitle">Warmup state</div>
+                    <div class="panel-subtitle">Warmup state + actions</div>
                 </div>
                 <div class="panel-content">
-                    ${models.length > 0 ? models.slice(0, 6).map(model => `
-                        <div class="panel-row">
-                            <span class="panel-label">${model.name}</span>
-                            <span class="panel-value"><span class="badge ${model.is_ready ? 'badge-success' : getStatusTone(model.status)}">${model.status || 'unknown'}</span></span>
+                    ${models.length > 0 ? models.slice(0, 8).map(model => `
+                        <div class="panel-row panel-row-stack">
+                            <div>
+                                <div class="panel-label">${model.name}</div>
+                                <div class="panel-meta">last warmup: ${formatTimestamp(model.last_warmup ? new Date(model.last_warmup * 1000).toISOString() : null)}</div>
+                            </div>
+                            <div class="panel-actions-inline">
+                                <span class="badge ${model.is_ready ? 'badge-success' : getStatusTone(model.status)}">${model.status || 'unknown'}</span>
+                                <button class="btn-mini" data-action="warm-model" data-target="${model.name}">Warm Up</button>
+                            </div>
                         </div>
                     `).join('') : '<div class="panel-row"><span class="panel-label">No model data</span><span class="panel-value">--</span></div>'}
                 </div>
@@ -840,13 +899,20 @@ function renderModels() {
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Provider Health</div>
-                    <div class="panel-subtitle">Load balancer backends</div>
+                    <div class="panel-subtitle">Load balancer backends + toggles</div>
                 </div>
                 <div class="panel-content">
-                    ${providers.length > 0 ? providers.slice(0, 6).map(provider => `
-                        <div class="panel-row">
-                            <span class="panel-label">${provider.name}</span>
-                            <span class="panel-value"><span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span></span>
+                    ${providers.length > 0 ? providers.slice(0, 8).map(provider => `
+                        <div class="panel-row panel-row-stack">
+                            <div>
+                                <div class="panel-label">${provider.name}</div>
+                                <div class="panel-meta">${provider.type} · ${formatShortLabel(provider.model, 28)} · weight ${provider.weight}</div>
+                            </div>
+                            <div class="panel-actions-inline">
+                                <span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span>
+                                <button class="btn-mini" data-action="enable-provider" data-target="${provider.name}">Enable</button>
+                                <button class="btn-mini btn-mini-danger" data-action="disable-provider" data-target="${provider.name}">Disable</button>
+                            </div>
                         </div>
                     `).join('') : '<div class="panel-row"><span class="panel-label">No provider data</span><span class="panel-value">--</span></div>'}
                 </div>
@@ -893,7 +959,77 @@ function renderModels() {
                 </tbody>
             </table>
         </div>
+
+        <div class="table-container" style="margin-top: 32px;">
+            <div class="table-header">Recent Control Actions</div>
+            <div id="models-actions-history" class="table-loading">Loading action history...</div>
+        </div>
     `;
+
+    document.getElementById('models-refresh-actions-btn')?.addEventListener('click', async () => {
+        await loadModels();
+    });
+
+    document.getElementById('models-warmup-all-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('models-warmup-all-btn');
+        btn.disabled = true;
+        try {
+            const result = await runControlAction('model_warmup_all', null, 20);
+            alert(result.message || 'Warm-up completed');
+            await loadModels();
+        } catch (error) {
+            alert(`Warm-up failed: ${error.message}`);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    pageEl.querySelectorAll('[data-action="warm-model"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('model_warmup', btn.dataset.target, 20);
+                alert(result.message || 'Model warmed');
+                await loadModels();
+            } catch (error) {
+                alert(`Model warm-up failed: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-action="enable-provider"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('provider_enable', btn.dataset.target);
+                alert(result.message || 'Provider enabled');
+                await loadModels();
+            } catch (error) {
+                alert(`Provider enable failed: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-action="disable-provider"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('provider_disable', btn.dataset.target);
+                alert(result.message || 'Provider disabled');
+                await loadModels();
+            } catch (error) {
+                alert(`Provider disable failed: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    loadControlActionHistory();
 }
 
 // System page
