@@ -931,7 +931,7 @@ body {
 .sidebar.collapsed .sidebar-header {
     padding: 0 14px;
     justify-content: space-between;
-    gap: 5.5px;
+    gap: 5px;
 }
 
 .sidebar.collapsed .logo {
@@ -940,7 +940,7 @@ body {
 }
 
 .sidebar.collapsed .sidebar-toggle {
-    margin-left: 3px;
+    margin-left: 2.8px;
     flex: 0 0 auto;
 }
 
