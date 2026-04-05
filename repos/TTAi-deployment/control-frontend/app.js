@@ -892,7 +892,7 @@ function renderModels() {
                                 <div class="panel-meta">last warmup: ${formatTimestamp(model.last_warmup ? new Date(model.last_warmup * 1000).toISOString() : null)}</div>
                             </div>
                             <div class="panel-actions-inline">
-                                <span class="badge ${model.is_ready ? 'badge-success' : getStatusTone(model.status)}">${model.status || 'unknown'}</span>
+                                ${renderStatusWithDot(model.status || 'unknown', model.is_ready ? 'healthy' : (String(model.status || '').toLowerCase() === 'error' ? 'unhealthy' : 'neutral'))}
                                 <button class="btn-mini" data-action="warm-model" data-target="${model.name}">Warm Up</button>
                             </div>
                         </div>

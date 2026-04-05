@@ -464,6 +464,16 @@ body {
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.75);
 }
 
+.status-pill.neutral {
+    background-color: rgba(148, 163, 184, 0.14);
+    color: var(--text-secondary);
+}
+
+.status-light.neutral {
+    background-color: var(--text-secondary);
+    box-shadow: 0 0 8px rgba(148, 163, 184, 0.45);
+}
+
 .toggle-switch {
     display: inline-flex;
     align-items: center;
