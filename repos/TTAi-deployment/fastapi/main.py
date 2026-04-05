@@ -18,6 +18,7 @@ from load_balancer import load_balancer, QueryComplexity, ProviderType
 from query_classifier import query_classifier, ClassificationResult
 from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
+from auth import get_current_admin_user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1169,7 +1170,7 @@ async def get_providers():
 
 @app.post("/api/loadbalancer/providers/{provider_name}/disable")
 @app.post(API_V1_SYSTEM_LOADBALANCER_DISABLE)
-async def disable_provider(provider_name: str):
+async def disable_provider(provider_name: str, current_user = Depends(get_current_admin_user)):
     """Disable a provider"""
     success = load_balancer.disable_provider(provider_name)
     if success:
@@ -1179,7 +1180,7 @@ async def disable_provider(provider_name: str):
 
 @app.post("/api/loadbalancer/providers/{provider_name}/enable")
 @app.post(API_V1_SYSTEM_LOADBALANCER_ENABLE)
-async def enable_provider(provider_name: str):
+async def enable_provider(provider_name: str, current_user = Depends(get_current_admin_user)):
     """Enable a provider"""
     success = load_balancer.enable_provider(provider_name)
     if success:
@@ -1206,7 +1207,7 @@ async def get_model_status(model_name: str):
 
 @app.post("/api/models/warmup/{model_name}")
 @app.post(API_V1_MODELS_WARMUP_ITEM)
-async def warmup_model(model_name: str, timeout: int = 30):
+async def warmup_model(model_name: str, timeout: int = 30, current_user = Depends(get_current_admin_user)):
     """Manually warm up a model"""
     success = await model_manager.warmup_model(model_name, timeout)
     if success:
@@ -1216,7 +1217,7 @@ async def warmup_model(model_name: str, timeout: int = 30):
 
 @app.post("/api/models/warmup/all")
 @app.post(API_V1_MODELS_WARMUP_ALL)
-async def warmup_all_models(timeout_per_model: int = 30):
+async def warmup_all_models(timeout_per_model: int = 30, current_user = Depends(get_current_admin_user)):
     """Warm up all models"""
     results = await model_manager.warmup_all(timeout_per_model)
     successful = sum(1 for success in results.values() if success)
@@ -1333,7 +1334,6 @@ async def test_loadbalancer():
 # Control Dashboard Proxy
 from fastapi import HTTPException, Depends
 import httpx
-from auth import get_current_admin_user
 
 CONTROL_DASHBOARD_URL = "http://localhost:8090"
 CONTROL_DASHBOARD_TOKEN = "ttai-control-token"
@@ -1436,6 +1436,7 @@ async def admin_quota_status(
     user_id: Optional[str] = None,
     tenant_id: Optional[str] = None,
     api_key_id: Optional[str] = None,
+    current_user = Depends(get_current_admin_user),
 ):
     effective_user_id = user_id or "anonymous"
     quota_status = check_quota_allowance(
@@ -1458,6 +1459,7 @@ async def admin_quota_status_by_user(
     target_user_id: str,
     tenant_id: Optional[str] = None,
     api_key_id: Optional[str] = None,
+    current_user = Depends(get_current_admin_user),
 ):
     quota_status = check_quota_allowance(
         user_id=target_user_id,
@@ -1488,6 +1490,7 @@ async def admin_billing_summary(
     quota_billable: Optional[bool] = None,
     billing_billable: Optional[bool] = None,
     billable_mode: Optional[str] = None,
+    current_user = Depends(get_current_admin_user),
 ):
     events = read_usage_events(limit=limit)
     filtered = filter_usage_events(
@@ -1522,7 +1525,7 @@ async def admin_billing_summary(
 # Billing config management endpoints
 @app.get("/api/admin/billing/config")
 @app.get(API_V1_ADMIN_BILLING_CONFIG)
-async def get_billing_config():
+async def get_billing_config(current_user = Depends(get_current_admin_user)):
     """Get current billing configuration"""
     config = load_billing_config()
     return {
@@ -1533,7 +1536,7 @@ async def get_billing_config():
 
 @app.put("/api/admin/billing/config")
 @app.put(API_V1_ADMIN_BILLING_CONFIG)
-async def update_billing_config(new_config: Dict):
+async def update_billing_config(new_config: Dict, current_user = Depends(get_current_admin_user)):
     """Update billing configuration (full replace)"""
     try:
         # Validate required structure
