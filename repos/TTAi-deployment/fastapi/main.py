@@ -82,6 +82,11 @@ def filter_usage_events(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     request_path: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+    quota_billable: Optional[bool] = None,
+    billing_billable: Optional[bool] = None,
+    billable_mode: Optional[str] = None,
 ):
     filtered = events
     if user_id:
@@ -94,6 +99,16 @@ def filter_usage_events(
         filtered = [e for e in filtered if (e.get("model") or "") == model]
     if request_path:
         filtered = [e for e in filtered if (e.get("request_path") or "") == request_path]
+    if tenant_id:
+        filtered = [e for e in filtered if (e.get("tenant_id") or "") == tenant_id]
+    if api_key_id:
+        filtered = [e for e in filtered if (e.get("api_key_id") or "") == api_key_id]
+    if quota_billable is not None:
+        filtered = [e for e in filtered if e.get("quota_billable") is quota_billable]
+    if billing_billable is not None:
+        filtered = [e for e in filtered if e.get("billing_billable") is billing_billable]
+    if billable_mode:
+        filtered = [e for e in filtered if (e.get("billable_mode") or "") == billable_mode]
     return filtered
 
 
@@ -704,6 +719,11 @@ async def admin_usage_events(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     request_path: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+    quota_billable: Optional[bool] = None,
+    billing_billable: Optional[bool] = None,
+    billable_mode: Optional[str] = None,
 ):
     events = read_usage_events(limit=1000)
     filtered = filter_usage_events(
@@ -713,6 +733,11 @@ async def admin_usage_events(
         provider=provider,
         model=model,
         request_path=request_path,
+        tenant_id=tenant_id,
+        api_key_id=api_key_id,
+        quota_billable=quota_billable,
+        billing_billable=billing_billable,
+        billable_mode=billable_mode,
     )
     return {
         "count": min(len(filtered), limit),
@@ -722,6 +747,11 @@ async def admin_usage_events(
             "provider": provider,
             "model": model,
             "request_path": request_path,
+            "tenant_id": tenant_id,
+            "api_key_id": api_key_id,
+            "quota_billable": quota_billable,
+            "billing_billable": billing_billable,
+            "billable_mode": billable_mode,
         },
         "events": filtered[:limit],
     }
@@ -735,6 +765,11 @@ async def admin_usage_summary(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     request_path: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+    quota_billable: Optional[bool] = None,
+    billing_billable: Optional[bool] = None,
+    billable_mode: Optional[str] = None,
 ):
     events = read_usage_events(limit=limit)
     filtered = filter_usage_events(
@@ -744,6 +779,11 @@ async def admin_usage_summary(
         provider=provider,
         model=model,
         request_path=request_path,
+        tenant_id=tenant_id,
+        api_key_id=api_key_id,
+        quota_billable=quota_billable,
+        billing_billable=billing_billable,
+        billable_mode=billable_mode,
     )
     return {
         "filters": {
@@ -752,6 +792,11 @@ async def admin_usage_summary(
             "provider": provider,
             "model": model,
             "request_path": request_path,
+            "tenant_id": tenant_id,
+            "api_key_id": api_key_id,
+            "quota_billable": quota_billable,
+            "billing_billable": billing_billable,
+            "billable_mode": billable_mode,
         },
         "summary": summarize_usage_events(filtered),
     }
@@ -765,6 +810,11 @@ async def admin_usage_by_user(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     request_path: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+    quota_billable: Optional[bool] = None,
+    billing_billable: Optional[bool] = None,
+    billable_mode: Optional[str] = None,
 ):
     events = read_usage_events(limit=1000)
     filtered = filter_usage_events(
@@ -774,6 +824,11 @@ async def admin_usage_by_user(
         provider=provider,
         model=model,
         request_path=request_path,
+        tenant_id=tenant_id,
+        api_key_id=api_key_id,
+        quota_billable=quota_billable,
+        billing_billable=billing_billable,
+        billable_mode=billable_mode,
     )
     return {
         "user_id": target_user_id,
@@ -783,6 +838,11 @@ async def admin_usage_by_user(
             "provider": provider,
             "model": model,
             "request_path": request_path,
+            "tenant_id": tenant_id,
+            "api_key_id": api_key_id,
+            "quota_billable": quota_billable,
+            "billing_billable": billing_billable,
+            "billable_mode": billable_mode,
         },
         "summary": summarize_usage_events(filtered),
         "events": filtered[:limit],
