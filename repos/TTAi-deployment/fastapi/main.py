@@ -512,6 +512,8 @@ API_V1_ADMIN_USAGE_SUMMARY = "/api/v1/admin/usage/summary"
 API_V1_ADMIN_USAGE_USER = "/api/v1/admin/usage/users/{target_user_id}"
 API_V1_ADMIN_USAGE_BILLING_SUMMARY = "/api/v1/admin/usage/billing-summary"
 API_V1_ADMIN_OVERVIEW = "/api/v1/admin/overview"
+API_V1_ADMIN_ERRORS_SUMMARY = "/api/v1/admin/errors/summary"
+API_V1_ADMIN_QUOTA_BLOCKED = "/api/v1/admin/quota/blocked"
 API_V1_ADMIN_BILLING_CONFIG = "/api/v1/admin/billing/config"
 API_V1_ADMIN_QUOTA_STATUS = "/api/v1/admin/quota/status"
 API_V1_ADMIN_QUOTA_STATUS_USER = "/api/v1/admin/quota/status/users/{target_user_id}"
@@ -1589,6 +1591,99 @@ async def admin_overview(
         "alerts": {
             "recent_errors": recent_errors,
         },
+    }
+
+@app.get(API_V1_ADMIN_ERRORS_SUMMARY)
+async def admin_errors_summary(
+    limit: int = Query(default=200, ge=1, le=5000),
+    top_n: int = Query(default=10, ge=1, le=50),
+    current_user = Depends(get_current_admin_user),
+):
+    events = read_usage_events(limit=limit)
+    error_events = [
+        event for event in events
+        if event.get("status") not in (None, "success")
+    ]
+
+    status_counts = Counter(event.get("status") or "unknown" for event in error_events)
+    http_status_counts = Counter(str(event.get("http_status") or "unknown") for event in error_events)
+    provider_counts = Counter(event.get("provider") or "unknown" for event in error_events)
+    model_counts = Counter(event.get("model") or "unknown" for event in error_events)
+
+    error_signature_counts = Counter(
+        f"{event.get('status') or 'unknown'}|{event.get('http_status') or 'unknown'}|{event.get('provider') or 'unknown'}|{event.get('model') or 'unknown'}|{(event.get('error') or 'unknown')[:120]}"
+        for event in error_events
+    )
+
+    recent_errors = [
+        {
+            "timestamp": event.get("timestamp"),
+            "request_id": event.get("request_id"),
+            "user_id": event.get("user_id"),
+            "tenant_id": event.get("tenant_id"),
+            "api_key_id": event.get("api_key_id"),
+            "provider": event.get("provider"),
+            "model": event.get("model"),
+            "status": event.get("status"),
+            "http_status": event.get("http_status"),
+            "error": event.get("error"),
+        }
+        for event in error_events[:top_n]
+    ]
+
+    return {
+        "window_event_count": len(events),
+        "error_event_count": len(error_events),
+        "status_breakdown": dict(status_counts.most_common(top_n)),
+        "http_status_breakdown": dict(http_status_counts.most_common(top_n)),
+        "provider_breakdown": dict(provider_counts.most_common(top_n)),
+        "model_breakdown": dict(model_counts.most_common(top_n)),
+        "top_error_signatures": [
+            {"signature": signature, "count": count}
+            for signature, count in error_signature_counts.most_common(top_n)
+        ],
+        "recent_errors": recent_errors,
+    }
+
+@app.get(API_V1_ADMIN_QUOTA_BLOCKED)
+async def admin_quota_blocked(
+    limit: int = Query(default=200, ge=1, le=5000),
+    recent_limit: int = Query(default=20, ge=1, le=100),
+    current_user = Depends(get_current_admin_user),
+):
+    events = read_usage_events(limit=limit)
+    blocked_events = [
+        event for event in events
+        if event.get("status") == "quota_exceeded" or event.get("http_status") == 429
+    ]
+
+    tenant_counts = Counter(event.get("tenant_id") or "unknown" for event in blocked_events)
+    api_key_counts = Counter(event.get("api_key_id") or "unknown" for event in blocked_events)
+    user_counts = Counter(event.get("user_id") or "unknown" for event in blocked_events)
+    reason_counts = Counter((event.get("quota_reason") or event.get("error") or "unknown") for event in blocked_events)
+
+    recent_blocked = [
+        {
+            "timestamp": event.get("timestamp"),
+            "request_id": event.get("request_id"),
+            "user_id": event.get("user_id"),
+            "tenant_id": event.get("tenant_id"),
+            "api_key_id": event.get("api_key_id"),
+            "quota_mode": event.get("quota_mode"),
+            "quota_reason": event.get("quota_reason") or event.get("error"),
+            "http_status": event.get("http_status"),
+        }
+        for event in blocked_events[:recent_limit]
+    ]
+
+    return {
+        "window_event_count": len(events),
+        "blocked_event_count": len(blocked_events),
+        "tenant_breakdown": dict(tenant_counts.most_common(20)),
+        "api_key_breakdown": dict(api_key_counts.most_common(20)),
+        "user_breakdown": dict(user_counts.most_common(20)),
+        "reason_breakdown": dict(reason_counts.most_common(20)),
+        "recent_blocked": recent_blocked,
     }
 
 # Billing config management endpoints
