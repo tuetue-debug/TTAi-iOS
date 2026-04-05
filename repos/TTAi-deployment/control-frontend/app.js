@@ -264,6 +264,12 @@ function formatKeyValuePairs(obj) {
     return entries.map(([k, v]) => `${k}:${v}`).join(', ');
 }
 
+function formatPercent(value) {
+    const num = Number(value || 0);
+    if (Number.isNaN(num)) return '0%';
+    return `${(num * 100).toFixed(num > 0 && num < 0.1 ? 1 : 0)}%`;
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -966,7 +972,9 @@ function renderUsage() {
     const recentEvents = data.recent_events || [];
     const topUsers = summary.top_users || [];
     const topProviders = summary.top_providers || [];
-    const statusBreakdown = summary.status_breakdown || {};
+    const statusBreakdown = data.breakdowns?.status_normalized || summary.status_breakdown || {};
+    const topTenants = data.breakdowns?.top_tenants || [];
+    const topApiKeys = data.breakdowns?.top_api_keys || [];
 
     pageEl.innerHTML = `
         <div class="kpi-grid">
@@ -983,16 +991,16 @@ function renderUsage() {
                 <div class="kpi-trend"><i class="fas fa-check-circle"></i><span>Processed successfully</span></div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-eyebrow">Errors</div>
-                <div class="kpi-title">Error Events</div>
-                <div class="kpi-value ${(highlights.error_events || 0) > 0 ? 'warning' : 'good'}">${highlights.error_events || 0}</div>
-                <div class="kpi-trend"><i class="fas fa-exclamation-triangle"></i><span>Needs review</span></div>
+                <div class="kpi-eyebrow">Quota</div>
+                <div class="kpi-title">Quota Exceeded</div>
+                <div class="kpi-value ${(highlights.quota_exceeded_events || 0) > 0 ? 'warning' : 'good'}">${highlights.quota_exceeded_events || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-ban"></i><span>Normalized outcome</span></div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-eyebrow">Tokens</div>
-                <div class="kpi-title">Estimated Tokens</div>
-                <div class="kpi-value neutral">${Number(highlights.total_tokens_est || 0).toLocaleString('en-US')}</div>
-                <div class="kpi-trend"><i class="fas fa-microchip"></i><span>Approximate load</span></div>
+                <div class="kpi-eyebrow">Fallback</div>
+                <div class="kpi-title">Fallback Rate</div>
+                <div class="kpi-value neutral">${formatPercent(highlights.fallback_rate || 0)}</div>
+                <div class="kpi-trend"><i class="fas fa-random"></i><span>${formatLatency(highlights.avg_processing_time_deduped || 0)} avg latency</span></div>
             </div>
         </div>
 
@@ -1041,6 +1049,36 @@ function renderUsage() {
                     `).join('') : '<div class="panel-row"><span class="panel-label">No status data</span><span class="panel-value">--</span></div>'}
                 </div>
             </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Top Tenants</div>
+                    <div class="panel-subtitle">Request volume by tenant</div>
+                </div>
+                <div class="panel-content">
+                    ${topTenants.length > 0 ? topTenants.slice(0, 6).map(([tenant, count]) => `
+                        <div class="panel-row">
+                            <span class="panel-label">${formatShortLabel(tenant, 24)}</span>
+                            <span class="panel-value">${count}</span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No tenant data</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Top API Keys</div>
+                    <div class="panel-subtitle">Request volume by API key</div>
+                </div>
+                <div class="panel-content">
+                    ${topApiKeys.length > 0 ? topApiKeys.slice(0, 6).map(([key, count]) => `
+                        <div class="panel-row">
+                            <span class="panel-label">${formatShortLabel(key, 18)}</span>
+                            <span class="panel-value">${count}</span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No API key data</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
         </div>
 
         <div class="table-container" style="margin-top: 32px;">
@@ -1063,7 +1101,7 @@ function renderUsage() {
                             <td>${formatShortLabel(event.user_id, 20)}</td>
                             <td>${formatShortLabel(event.provider || event.provider_type || '--', 24)}</td>
                             <td>${formatShortLabel(event.model, 24)}</td>
-                            <td><span class="badge ${getStatusTone(event.status)}">${event.status || '--'}</span></td>
+                            <td><span class="badge ${getStatusTone(event.status_normalized || event.status)}">${event.status_normalized || event.status || '--'}</span></td>
                             <td>${Number(event.total_tokens_est || 0).toLocaleString('en-US')}</td>
                         </tr>
                     `).join('') : '<tr><td colspan="6">No recent events</td></tr>'}

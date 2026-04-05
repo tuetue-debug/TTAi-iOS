@@ -1913,31 +1913,83 @@ async def control_system():
 @app.get("/control-api/usage")
 async def control_usage(limit: int = Query(default=20, ge=5, le=100)):
     summary_response = await admin_usage_summary(limit=500)
-    events_response = await admin_usage_events(limit=limit)
+    events_response = await admin_usage_events(limit=200)
 
     summary = summary_response.get("summary", {}) if isinstance(summary_response, dict) else {}
-    events = events_response.get("events", []) if isinstance(events_response, dict) else []
+    raw_events = events_response.get("events", []) if isinstance(events_response, dict) else []
+    events = [normalize_usage_event(event) for event in raw_events]
+
+    deduped_events = []
+    seen_keys = set()
+    for event in events:
+        dedupe_key = (
+            event.get("request_id"),
+            event.get("user_id"),
+            event.get("status_normalized"),
+            event.get("quota_reason_normalized"),
+            event.get("provider"),
+            event.get("model"),
+        )
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        deduped_events.append(event)
+
+    normalized_status_breakdown = {}
+    tenant_counts = {}
+    api_key_counts = {}
+    fallback_count = 0
+    processing_times = []
+
+    for event in deduped_events:
+        normalized_status = event.get("status_normalized", "unknown")
+        normalized_status_breakdown[normalized_status] = normalized_status_breakdown.get(normalized_status, 0) + 1
+
+        tenant_id = event.get("tenant_id") or "unassigned"
+        tenant_counts[tenant_id] = tenant_counts.get(tenant_id, 0) + 1
+
+        api_key_id = event.get("api_key_id") or "unassigned"
+        api_key_counts[api_key_id] = api_key_counts.get(api_key_id, 0) + 1
+
+        if event.get("fallback_used"):
+            fallback_count += 1
+
+        processing_time = event.get("processing_time")
+        if isinstance(processing_time, (int, float)):
+            processing_times.append(processing_time)
+
+    deduped_total = len(deduped_events)
+    avg_latency = (sum(processing_times) / len(processing_times)) if processing_times else 0
+    fallback_rate = (fallback_count / deduped_total) if deduped_total else 0
 
     top_users = summary.get("top_users", []) if isinstance(summary, dict) else []
     top_providers = summary.get("top_providers", []) if isinstance(summary, dict) else []
     top_provider_types = summary.get("top_provider_types", []) if isinstance(summary, dict) else []
-    status_breakdown = summary.get("status_breakdown", {}) if isinstance(summary, dict) else {}
 
     return {
         "summary": summary,
         "highlights": {
             "total_events": summary.get("total_events", 0),
-            "success_events": summary.get("success_events", 0),
-            "error_events": summary.get("error_events", 0),
-            "fallback_events": summary.get("fallback_events", 0),
+            "deduped_events": deduped_total,
+            "success_events": normalized_status_breakdown.get("success", 0),
+            "error_events": normalized_status_breakdown.get("error", 0),
+            "quota_exceeded_events": normalized_status_breakdown.get("quota_exceeded", 0),
+            "fallback_events": fallback_count,
+            "fallback_rate": fallback_rate,
             "total_tokens_est": summary.get("total_tokens_est", 0),
             "avg_processing_time": summary.get("avg_processing_time", 0),
+            "avg_processing_time_deduped": avg_latency,
             "top_user": top_users[0] if top_users else None,
             "top_provider": top_providers[0] if top_providers else None,
             "top_provider_type": top_provider_types[0] if top_provider_types else None,
-            "top_status": next(iter(status_breakdown.items())) if status_breakdown else None,
+            "top_status": next(iter(normalized_status_breakdown.items())) if normalized_status_breakdown else None,
         },
-        "recent_events": events,
+        "breakdowns": {
+            "status_normalized": dict(sorted(normalized_status_breakdown.items(), key=lambda item: item[1], reverse=True)),
+            "top_tenants": sorted(tenant_counts.items(), key=lambda item: item[1], reverse=True)[:10],
+            "top_api_keys": sorted(api_key_counts.items(), key=lambda item: item[1], reverse=True)[:10],
+        },
+        "recent_events": deduped_events[:limit],
     }
 
 def extract_quota_reason(event: Dict) -> str:
@@ -1991,6 +2043,27 @@ def extract_error_message(event: Dict) -> str:
         return str(status)
 
     return "Unknown error"
+
+
+def normalize_usage_event(event: Dict) -> Dict:
+    normalized = dict(event)
+
+    status = str(normalized.get("status") or "unknown")
+    quota_reason = extract_quota_reason(normalized)
+    error_message = extract_error_message(normalized)
+
+    normalized["status_normalized"] = status
+    normalized["quota_reason_normalized"] = quota_reason
+    normalized["error_message_normalized"] = error_message
+
+    if status == "error" and quota_reason in {
+        "max_requests_exceeded",
+        "max_tokens_est_exceeded",
+        "max_estimated_cost_exceeded",
+    }:
+        normalized["status_normalized"] = "quota_exceeded"
+
+    return normalized
 
 # Billing config management endpoints
 @app.get("/api/admin/billing/config")
