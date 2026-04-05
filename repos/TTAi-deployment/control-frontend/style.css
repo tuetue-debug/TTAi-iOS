@@ -526,6 +526,235 @@ body {
     cursor: wait;
 }
 
+/* Action cards */
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 20px;
+}
+
+.action-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.action-icon {
+    font-size: 24px;
+    color: var(--accent-blue);
+    margin-bottom: 12px;
+}
+
+.action-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.action-description {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 16px;
+    flex: 1;
+}
+
+.btn-action {
+    background-color: rgba(59, 130, 246, 0.16);
+    color: var(--accent-blue);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    align-self: stretch;
+    text-align: center;
+}
+
+.btn-action:hover {
+    background-color: rgba(59, 130, 246, 0.24);
+}
+
+.btn-action-warning {
+    color: var(--accent-yellow);
+    border-color: rgba(245, 158, 11, 0.35);
+    background-color: rgba(245, 158, 11, 0.14);
+}
+
+.btn-action-warning:hover {
+    background-color: rgba(245, 158, 11, 0.22);
+}
+
+.btn-action-danger {
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.35);
+    background-color: rgba(239, 68, 68, 0.14);
+}
+
+.btn-action-danger:hover {
+    background-color: rgba(239, 68, 68, 0.22);
+}
+
+/* Toast */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 360px;
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: auto;
+}
+
+.toast-show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-info {
+    border-left: 4px solid var(--accent-blue);
+}
+
+.toast-success {
+    border-left: 4px solid var(--accent-green);
+}
+
+.toast-warning {
+    border-left: 4px solid var(--accent-yellow);
+}
+
+.toast-error {
+    border-left: 4px solid var(--accent-red);
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toast-close:hover {
+    color: var(--text-primary);
+}
+
+/* Confirm overlay */
+.confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.confirm-dialog {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    max-width: 480px;
+    width: 100%;
+}
+
+.confirm-dangerous {
+    border-color: var(--accent-red);
+}
+
+.confirm-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.confirm-message {
+    color: var(--text-secondary);
+    font-size: 15px;
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.confirm-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.confirm-cancel,
+.confirm-ok {
+    padding: 10px 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--border);
+}
+
+.confirm-cancel {
+    background-color: rgba(148, 163, 184, 0.14);
+    color: var(--text-secondary);
+}
+
+.confirm-cancel:hover {
+    background-color: rgba(148, 163, 184, 0.22);
+}
+
+.confirm-ok {
+    background-color: rgba(59, 130, 246, 0.16);
+    color: var(--accent-blue);
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+.confirm-ok:hover {
+    background-color: rgba(59, 130, 246, 0.24);
+}
+
+.confirm-dangerous .confirm-ok {
+    background-color: rgba(239, 68, 68, 0.16);
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.confirm-dangerous .confirm-ok:hover {
+    background-color: rgba(239, 68, 68, 0.24);
+}
+
 .panel-label {
     color: var(--text-secondary);
     flex: 1;

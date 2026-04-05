@@ -1050,6 +1050,8 @@ function renderSystem() {
     const lbSummary = workloads.load_balancer?.summary || {};
 
     pageEl.innerHTML = `
+        <div class="toast-container" id="toast-container"></div>
+
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">System</div>
@@ -1074,6 +1076,33 @@ function renderSystem() {
                 <div class="kpi-title">Open Alerts</div>
                 <div class="kpi-value ${(summary.alert_count || 0) > 0 ? 'warning' : 'good'}">${summary.alert_count || 0}</div>
                 <div class="kpi-trend"><i class="fas fa-bell"></i><span>Current signals</span></div>
+            </div>
+        </div>
+
+        <div class="action-grid" style="margin-bottom: 32px;">
+            <div class="action-card">
+                <div class="action-icon"><i class="fas fa-sync-alt"></i></div>
+                <div class="action-title">Refresh Health</div>
+                <div class="action-description">Force immediate health check of all backends</div>
+                <button class="btn-action" data-action="health-refresh" data-confirm="false">Run Now</button>
+            </div>
+            <div class="action-card">
+                <div class="action-icon"><i class="fas fa-fire"></i></div>
+                <div class="action-title">Warm Up All Models</div>
+                <div class="action-description">Pre‑warm all configured models for faster first‑response</div>
+                <button class="btn-action btn-action-warning" data-action="model-warmup-all" data-confirm="true">Warm Up</button>
+            </div>
+            <div class="action-card">
+                <div class="action-icon"><i class="fas fa-broom"></i></div>
+                <div class="action-title">Clear Learn Queue</div>
+                <div class="action-description">Empty the pending learn‑queue items (irreversible)</div>
+                <button class="btn-action btn-action-danger" data-action="clear-learn-queue" data-confirm="true">Clear Queue</button>
+            </div>
+            <div class="action-card">
+                <div class="action-icon"><i class="fas fa-archive"></i></div>
+                <div class="action-title">Archive Old Events</div>
+                <div class="action-description">Move events older than 30 days to cold storage</div>
+                <button class="btn-action" data-action="archive-events" data-confirm="true">Archive</button>
             </div>
         </div>
 
@@ -1146,6 +1175,124 @@ function renderSystem() {
             </table>
         </div>
     `;
+
+    // Attach action card listeners
+    pageEl.querySelectorAll('[data-action="health-refresh"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('health_refresh');
+                showToast(result.message || 'Health refreshed', 'success');
+                await loadSystem();
+            } catch (error) {
+                showToast(`Health refresh failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-action="model-warmup-all"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const confirmed = await confirmAction('Warm up all models? This may take 20‑30 seconds.', false);
+            if (!confirmed) return;
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('model_warmup_all', null, 20);
+                showToast(result.message || 'All models warmed up', 'success');
+                await loadSystem();
+            } catch (error) {
+                showToast(`Warm‑up failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-action="clear-learn-queue"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const confirmed = await confirmAction('Clear the learn queue? This action is irreversible and will delete pending learning items.', true);
+            if (!confirmed) return;
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('clear_learn_queue');
+                showToast(result.message || 'Learn queue cleared', 'success');
+                await loadSystem();
+            } catch (error) {
+                showToast(`Clear failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-action="archive-events"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const confirmed = await confirmAction('Archive events older than 30 days? This moves them to cold storage.', false);
+            if (!confirmed) return;
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('archive_events');
+                showToast(result.message || 'Events archived', 'success');
+                await loadSystem();
+            } catch (error) {
+                showToast(`Archive failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+}
+
+// Toast and confirm utilities
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<span>${message}</span><button class="toast-close">&times;</button>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('toast-show');
+    }, 10);
+    setTimeout(() => {
+        toast.classList.remove('toast-show');
+        setTimeout(() => {
+            if (toast.parentNode) container.removeChild(toast);
+        }, 300);
+    }, 5000);
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        toast.classList.remove('toast-show');
+        setTimeout(() => {
+            if (toast.parentNode) container.removeChild(toast);
+        }, 300);
+    });
+}
+
+function confirmAction(message, dangerous = false) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.innerHTML = `
+            <div class="confirm-dialog ${dangerous ? 'confirm-dangerous' : ''}">
+                <div class="confirm-title">${dangerous ? '⚠️ Dangerous Action' : 'Confirm Action'}</div>
+                <div class="confirm-message">${message}</div>
+                <div class="confirm-buttons">
+                    <button class="confirm-cancel">Cancel</button>
+                    <button class="confirm-ok">${dangerous ? 'Proceed Anyway' : 'OK'}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.querySelector('.confirm-cancel').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        });
+        overlay.querySelector('.confirm-ok').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        });
+    });
 }
 
 // Usage page
