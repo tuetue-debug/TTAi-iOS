@@ -1984,10 +1984,20 @@ async def control_models(current_user = Depends(get_current_control_user)):
     ollama_models = ollama_models_resp.get("models", []) if isinstance(ollama_models_resp, dict) else []
     lb_metrics_dict = lb_metrics.model_dump() if hasattr(lb_metrics, "model_dump") else (lb_metrics if isinstance(lb_metrics, dict) else {})
 
+    health_status_map = (lb_metrics_dict.get("health_status", {}) or {})
+    provider_list = [
+        {
+            **provider,
+            "health": "healthy" if health_status_map.get(provider.get("name")) else "unhealthy",
+            "enabled_state": "enabled" if provider.get("enabled") else "disabled",
+        }
+        for provider in provider_list
+    ]
+
     warm_count = sum(1 for m in models_list if m.get("is_ready"))
     error_count = sum(1 for m in models_list if m.get("status") == "error")
     enabled_count = sum(1 for p in provider_list if p.get("enabled"))
-    healthy_provider_count = sum(1 for ok in (lb_metrics_dict.get("health_status", {}) or {}).values() if ok)
+    healthy_provider_count = sum(1 for ok in health_status_map.values() if ok)
 
     return {
         "summary": {
@@ -1997,6 +2007,8 @@ async def control_models(current_user = Depends(get_current_control_user)):
             "provider_count": len(provider_list),
             "enabled_provider_count": enabled_count,
             "healthy_provider_count": healthy_provider_count,
+            "enabled_provider_count": enabled_count,
+            "disabled_provider_count": max(len(provider_list) - enabled_count, 0),
             "ollama_status": ollama.get("status", "unknown"),
             "ollama_model_count": len(ollama_models),
         },

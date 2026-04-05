@@ -862,9 +862,9 @@ function renderModels() {
             </div>
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Providers</div>
-                <div class="kpi-title">Healthy Providers</div>
+                <div class="kpi-title">Healthy / Enabled</div>
                 <div class="kpi-value ${summary.provider_count > 0 && summary.healthy_provider_count === summary.provider_count ? 'good' : 'warning'}">${summary.healthy_provider_count || 0}/${summary.provider_count || 0}</div>
-                <div class="kpi-trend"><i class="fas fa-network-wired"></i><span>LB health status</span></div>
+                <div class="kpi-trend"><i class="fas fa-network-wired"></i><span>${summary.enabled_provider_count || 0} enabled · ${summary.disabled_provider_count || 0} disabled</span></div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Ollama</div>
@@ -909,9 +909,10 @@ function renderModels() {
                                 <div class="panel-meta">${provider.type} · ${formatShortLabel(provider.model, 28)} · weight ${provider.weight}</div>
                             </div>
                             <div class="panel-actions-inline">
-                                <span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span>
-                                <button class="btn-mini" data-action="enable-provider" data-target="${provider.name}">Enable</button>
-                                <button class="btn-mini btn-mini-danger" data-action="disable-provider" data-target="${provider.name}">Disable</button>
+                                <span class="badge ${provider.enabled ? 'badge-info' : 'badge-default'}">${provider.enabled ? 'enabled' : 'disabled'}</span>
+                                <span class="badge ${provider.health === 'healthy' ? 'badge-success' : 'badge-danger'}">${provider.health || 'unknown'}</span>
+                                <button class="btn-mini" data-action="enable-provider" data-target="${provider.name}" ${provider.enabled ? 'disabled' : ''}>Enable</button>
+                                <button class="btn-mini btn-mini-danger" data-action="disable-provider" data-target="${provider.name}" ${provider.enabled ? '' : 'disabled'}>Disable</button>
                             </div>
                         </div>
                     `).join('') : '<div class="panel-row"><span class="panel-label">No provider data</span><span class="panel-value">--</span></div>'}
@@ -943,7 +944,8 @@ function renderModels() {
                         <th>Type</th>
                         <th>Model</th>
                         <th>Weight</th>
-                        <th>Status</th>
+                        <th>Enabled</th>
+                        <th>Health</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -953,7 +955,8 @@ function renderModels() {
                             <td>${provider.type}</td>
                             <td>${provider.model}</td>
                             <td>${provider.weight}</td>
-                            <td><span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span></td>
+                            <td><span class="badge ${provider.enabled ? 'badge-info' : 'badge-default'}">${provider.enabled ? 'enabled' : 'disabled'}</span></td>
+                            <td><span class="badge ${provider.health === 'healthy' ? 'badge-success' : 'badge-danger'}">${provider.health || 'unknown'}</span></td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -1004,8 +1007,8 @@ function renderModels() {
             btn.disabled = true;
             try {
                 const result = await runControlAction('provider_enable', btn.dataset.target);
-                alert(result.message || 'Provider enabled');
                 await loadModels();
+                alert(result.message || 'Provider enabled');
             } catch (error) {
                 alert(`Provider enable failed: ${error.message}`);
             } finally {
@@ -1019,8 +1022,8 @@ function renderModels() {
             btn.disabled = true;
             try {
                 const result = await runControlAction('provider_disable', btn.dataset.target);
-                alert(result.message || 'Provider disabled');
                 await loadModels();
+                alert(result.message || 'Provider disabled');
             } catch (error) {
                 alert(`Provider disable failed: ${error.message}`);
             } finally {
