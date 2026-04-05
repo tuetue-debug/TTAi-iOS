@@ -59,3 +59,18 @@ def get_current_control_user(control_session: str | None = Cookie(default=None, 
         "auth_mode": get_admin_auth_mode(),
         "session_type": "cookie",
     }
+
+
+def should_use_secure_cookie() -> bool:
+    """Enable Secure cookies automatically outside local HTTP development."""
+    env_value = (os.getenv("TTAI_CONTROL_COOKIE_SECURE") or "").strip().lower()
+    if env_value in {"1", "true", "yes", "on"}:
+        return True
+    if env_value in {"0", "false", "no", "off"}:
+        return False
+
+    env_name = (os.getenv("ENV") or os.getenv("APP_ENV") or os.getenv("TTAI_ENV") or "").strip().lower()
+    if env_name in {"prod", "production", "staging"}:
+        return True
+
+    return False

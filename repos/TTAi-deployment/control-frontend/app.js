@@ -22,9 +22,15 @@ const logoutBtn = document.getElementById('logout-btn');
 const currentTimeEl = document.getElementById('current-time');
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initNavigation();
     initTimeDisplay();
+
+    try {
+        await fetchAPI('/control-auth/session');
+    } catch (error) {
+        return;
+    }
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
     const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage'];
@@ -221,6 +227,13 @@ function refreshCurrentPage() {
     loadPage(currentPage);
 }
 
+async function runControlAction(action, target = null, timeout = 30) {
+    return fetchAPI('/control-api/actions/run', {
+        method: 'POST',
+        body: JSON.stringify({ action, target, timeout })
+    });
+}
+
 function formatTimestamp(value) {
     if (!value) return '--';
     const date = new Date(value);
@@ -319,6 +332,17 @@ function renderOverview() {
     const recentErrors = data.alerts?.recent_errors || [];
     
     pageEl.innerHTML = `
+        <div class="action-bar">
+            <button class="btn-refresh" id="overview-health-refresh-btn">
+                <i class="fas fa-heartbeat"></i>
+                Refresh Health Snapshot
+            </button>
+            <button class="btn-refresh" id="overview-warmup-all-btn">
+                <i class="fas fa-fire"></i>
+                Warm Up All Models
+            </button>
+        </div>
+
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Health</div>
@@ -426,6 +450,33 @@ function renderOverview() {
             </div>
         </div>
     `;
+
+    document.getElementById('overview-health-refresh-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('overview-health-refresh-btn');
+        btn.disabled = true;
+        try {
+            await runControlAction('health_refresh');
+            await loadOverview();
+        } catch (error) {
+            alert(`Health refresh failed: ${error.message}`);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('overview-warmup-all-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('overview-warmup-all-btn');
+        btn.disabled = true;
+        try {
+            const result = await runControlAction('model_warmup_all', null, 20);
+            alert(result.message || 'Warm-up completed');
+            await loadOverview();
+        } catch (error) {
+            alert(`Warm-up failed: ${error.message}`);
+        } finally {
+            btn.disabled = false;
+        }
+    });
 }
 
 // Quota page

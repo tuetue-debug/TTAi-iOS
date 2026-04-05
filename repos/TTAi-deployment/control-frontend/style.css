@@ -240,6 +240,19 @@ body {
     margin-bottom: 16px;
 }
 
+/* Action bar */
+.action-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.btn-refresh:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 /* KPI Cards */
 .kpi-grid {
     display: grid;

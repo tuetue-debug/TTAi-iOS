@@ -20,7 +20,7 @@ from load_balancer import load_balancer, QueryComplexity, ProviderType
 from query_classifier import query_classifier, ClassificationResult
 from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
-from auth import get_current_admin_user, get_current_control_user, validate_admin_token, CONTROL_SESSION_COOKIE
+from auth import get_current_admin_user, get_current_control_user, validate_admin_token, CONTROL_SESSION_COOKIE, should_use_secure_cookie
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -87,6 +87,30 @@ def load_billing_config() -> Dict:
 def write_usage_event(event: Dict):
     with open(USAGE_EVENTS_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+CONTROL_ACTIONS_LOG_PATH = BASE_DIR / "data" / "control_actions.jsonl"
+
+
+def write_control_action(action: Dict):
+    CONTROL_ACTIONS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONTROL_ACTIONS_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(action, ensure_ascii=False) + "\n")
+
+
+def read_control_actions(limit: int = 100) -> List[Dict]:
+    if not CONTROL_ACTIONS_LOG_PATH.exists():
+        return []
+    lines = CONTROL_ACTIONS_LOG_PATH.read_text(encoding="utf-8").splitlines()
+    actions = []
+    for line in lines[-limit:]:
+        if not line.strip():
+            continue
+        try:
+            actions.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return list(reversed(actions))
 
 def read_usage_events(limit: int = 100) -> List[Dict]:
     if not USAGE_EVENTS_PATH.exists():
@@ -479,6 +503,12 @@ CONTROL_LOGIN_HTML = """
 class ControlLoginRequest(BaseModel):
     token: str
 
+
+class ControlActionRequest(BaseModel):
+    action: str
+    target: Optional[str] = None
+    timeout: int = 30
+
 @app.get("/control-login", response_class=HTMLResponse)
 async def control_login_page():
     return CONTROL_LOGIN_HTML
@@ -493,7 +523,7 @@ async def control_auth_login(payload: ControlLoginRequest, response: Response):
         value=payload.token,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=should_use_secure_cookie(),
         max_age=60 * 60 * 12,
         path="/",
     )
@@ -506,7 +536,15 @@ async def control_auth_logout(response: Response, current_user = Depends(get_cur
 
 @app.get("/control-auth/session")
 async def control_auth_session(current_user = Depends(get_current_control_user)):
-    return {"ok": True, "user": current_user}
+    return {
+        "ok": True,
+        "user": current_user,
+        "cookie": {
+            "name": CONTROL_SESSION_COOKIE,
+            "secure": should_use_secure_cookie(),
+            "samesite": "lax",
+        },
+    }
 
 # Models
 class ChatRequest(BaseModel):
@@ -2077,6 +2115,103 @@ async def control_usage(limit: int = Query(default=20, ge=5, le=100), current_us
         },
         "recent_events": deduped_events[:limit],
     }
+
+
+@app.get("/control-api/session")
+async def control_session_state(current_user = Depends(get_current_control_user)):
+    return {
+        "ok": True,
+        "user": current_user,
+        "cookie_secure": should_use_secure_cookie(),
+        "available_actions": {
+            "providers": ["enable", "disable"],
+            "models": ["warmup_one", "warmup_all"],
+            "system": ["health_refresh"],
+        },
+    }
+
+
+@app.get("/control-api/actions")
+async def control_actions(limit: int = Query(default=25, ge=1, le=200), current_user = Depends(get_current_control_user)):
+    return {
+        "actions": read_control_actions(limit=limit)
+    }
+
+
+@app.post("/control-api/actions/run")
+async def control_run_action(payload: ControlActionRequest, current_user = Depends(get_current_control_user)):
+    action = (payload.action or "").strip().lower()
+    target = (payload.target or "").strip()
+    timestamp = datetime.utcnow().isoformat() + "Z"
+
+    action_record = {
+        "timestamp": timestamp,
+        "actor": current_user.get("username", "admin"),
+        "session_type": current_user.get("session_type"),
+        "action": action,
+        "target": target or None,
+        "timeout": payload.timeout,
+    }
+
+    try:
+        if action == "provider_enable":
+            if not target:
+                raise HTTPException(status_code=400, detail="target is required for provider_enable")
+            success = load_balancer.enable_provider(target)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Provider {target} not found")
+            result = {"ok": True, "message": f"Provider {target} enabled"}
+
+        elif action == "provider_disable":
+            if not target:
+                raise HTTPException(status_code=400, detail="target is required for provider_disable")
+            success = load_balancer.disable_provider(target)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Provider {target} not found")
+            result = {"ok": True, "message": f"Provider {target} disabled"}
+
+        elif action == "model_warmup":
+            if not target:
+                raise HTTPException(status_code=400, detail="target is required for model_warmup")
+            success = await model_manager.warmup_model(target, payload.timeout)
+            if not success:
+                raise HTTPException(status_code=500, detail=f"Failed to warm up model {target}")
+            result = {"ok": True, "message": f"Model {target} warmed up successfully"}
+
+        elif action == "model_warmup_all":
+            results = await model_manager.warmup_all(payload.timeout)
+            result = {
+                "ok": True,
+                "message": f"Warmed up {sum(1 for success in results.values() if success)}/{len(results)} models",
+                "results": results,
+            }
+
+        elif action == "health_refresh":
+            result = {
+                "ok": True,
+                "health": await health(),
+                "health_detailed": await health_detailed(),
+            }
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported control action: {action}")
+
+        action_record["status"] = "success"
+        action_record["result"] = result.get("message") or "ok"
+        write_control_action(action_record)
+        return result
+
+    except HTTPException as exc:
+        action_record["status"] = "error"
+        action_record["result"] = exc.detail
+        write_control_action(action_record)
+        raise
+    except Exception as exc:
+        action_record["status"] = "error"
+        action_record["result"] = str(exc)
+        write_control_action(action_record)
+        logger.error(f"Control action failed: {action}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Control action failed: {str(exc)}")
 
 def extract_quota_reason(event: Dict) -> str:
     reason = event.get("quota_reason")
