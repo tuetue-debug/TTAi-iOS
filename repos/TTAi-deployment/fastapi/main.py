@@ -1885,6 +1885,31 @@ async def control_models():
         },
     }
 
+@app.get("/control-api/system")
+async def control_system():
+    health_summary = collector_service.health_summary()
+    workloads = collector_service.workloads()
+    alerts = collector_service.alerts()
+
+    nodes = health_summary.get("nodes", []) if isinstance(health_summary, dict) else []
+    alerts_list = alerts.get("alerts", []) if isinstance(alerts, dict) else []
+    lb_summary = workloads.get("load_balancer", {}).get("summary", {}) if isinstance(workloads, dict) else {}
+
+    return {
+        "summary": {
+            "overall_status": health_summary.get("overall_status", "unknown") if isinstance(health_summary, dict) else "unknown",
+            "node_count": len(nodes),
+            "alert_count": len(alerts_list),
+            "dataset_count": workloads.get("datasets", {}).get("count", 0) if isinstance(workloads, dict) else 0,
+            "rag_document_count": workloads.get("rag", {}).get("document_count", 0) if isinstance(workloads, dict) else 0,
+            "learn_queue_length": workloads.get("learn_queue", {}).get("length", 0) if isinstance(workloads, dict) else 0,
+            "backend_count": len(lb_summary),
+        },
+        "health": health_summary,
+        "workloads": workloads,
+        "alerts": alerts,
+    }
+
 def extract_quota_reason(event: Dict) -> str:
     reason = event.get("quota_reason")
     if reason:

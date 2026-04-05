@@ -10,6 +10,7 @@ let quotaData = null;
 let billingData = null;
 let errorsData = null;
 let modelsData = null;
+let systemData = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
@@ -24,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTimeDisplay();
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -169,6 +170,9 @@ async function loadPage(page) {
                 break;
             case 'models':
                 await loadModels();
+                break;
+            case 'system':
+                await loadSystem();
                 break;
             default:
                 pageEl.innerHTML = `
@@ -788,6 +792,127 @@ function renderModels() {
                             <td>${provider.model}</td>
                             <td>${provider.weight}</td>
                             <td><span class="badge ${healthStatus[provider.name] ? 'badge-success' : 'badge-danger'}">${healthStatus[provider.name] ? 'healthy' : 'unhealthy'}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// System page
+async function loadSystem() {
+    try {
+        const data = await fetchAPI('/control-api/system');
+        systemData = data;
+        renderSystem();
+    } catch (error) {
+        throw error;
+    }
+}
+
+function renderSystem() {
+    const pageEl = document.getElementById('page-system');
+    const data = systemData;
+    if (!data) return;
+
+    const summary = data.summary || {};
+    const nodes = data.health?.nodes || [];
+    const alerts = data.alerts?.alerts || [];
+    const workloads = data.workloads || {};
+    const lbSummary = workloads.load_balancer?.summary || {};
+
+    pageEl.innerHTML = `
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">System</div>
+                <div class="kpi-title">Overall Status</div>
+                <div class="kpi-value ${summary.overall_status === 'healthy' ? 'good' : 'warning'}">${String(summary.overall_status || 'unknown').toUpperCase()}</div>
+                <div class="kpi-trend"><i class="fas fa-heartbeat"></i><span>Collector summary</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Nodes</div>
+                <div class="kpi-title">Tracked Nodes</div>
+                <div class="kpi-value neutral">${summary.node_count || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-server"></i><span>Infrastructure footprint</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">RAG</div>
+                <div class="kpi-title">Documents</div>
+                <div class="kpi-value neutral">${summary.rag_document_count || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-database"></i><span>Knowledge base size</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Alerts</div>
+                <div class="kpi-title">Open Alerts</div>
+                <div class="kpi-value ${(summary.alert_count || 0) > 0 ? 'warning' : 'good'}">${summary.alert_count || 0}</div>
+                <div class="kpi-trend"><i class="fas fa-bell"></i><span>Current signals</span></div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Node Health</div>
+                    <div class="panel-subtitle">Service groups</div>
+                </div>
+                <div class="panel-content">
+                    ${nodes.map(node => `
+                        <div class="panel-row">
+                            <span class="panel-label">${node.label} (${node.location})</span>
+                            <span class="panel-value"><span class="badge ${node.status === 'healthy' ? 'badge-success' : 'badge-warning'}">${node.status}</span></span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Workload Summary</div>
+                    <div class="panel-subtitle">Data + queue state</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Learn Queue</span><span class="panel-value">${workloads.learn_queue?.length ?? 0}</span></div>
+                    <div class="panel-row"><span class="panel-label">Datasets</span><span class="panel-value">${workloads.datasets?.count ?? 0}</span></div>
+                    <div class="panel-row"><span class="panel-label">Latest Dataset</span><span class="panel-value">${workloads.datasets?.latest || '--'}</span></div>
+                    <div class="panel-row"><span class="panel-label">Vector Store Docs</span><span class="panel-value">${workloads.vector_store?.document_count ?? 0}</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Alerts</div>
+                    <div class="panel-subtitle">Current attention items</div>
+                </div>
+                <div class="panel-content">
+                    ${alerts.length > 0 ? alerts.slice(0, 6).map(alert => `
+                        <div class="panel-row">
+                            <span class="panel-label">${alert.message || 'Alert'}</span>
+                            <span class="panel-value"><span class="badge ${alert.severity === 'critical' ? 'badge-danger' : 'badge-warning'}">${alert.severity || 'info'}</span></span>
+                        </div>
+                    `).join('') : '<div class="panel-row"><span class="panel-label">No active alerts</span><span class="panel-value"><span class="badge badge-success">clear</span></span></div>'}
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container" style="margin-top: 32px;">
+            <div class="table-header">Backend Health Summary</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Backend</th>
+                        <th>Counts</th>
+                        <th>Avg Latency</th>
+                        <th>Last Latency</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.entries(lbSummary).map(([backend, info]) => `
+                        <tr>
+                            <td>${backend}</td>
+                            <td>${Object.entries(info.counts || {}).map(([k,v]) => `${k}:${v}`).join(', ') || '--'}</td>
+                            <td>${info.avg_latency_ms ?? '--'} ms</td>
+                            <td>${info.last_latency_ms ?? '--'} ms</td>
                         </tr>
                     `).join('')}
                 </tbody>
