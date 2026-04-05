@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, Header
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import os
 import httpx
@@ -19,7 +20,7 @@ from load_balancer import load_balancer, QueryComplexity, ProviderType
 from query_classifier import query_classifier, ClassificationResult
 from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
-from auth import get_current_admin_user
+from auth import get_current_admin_user, get_current_control_user, validate_admin_token, CONTROL_SESSION_COOKIE
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -424,6 +425,88 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+CONTROL_LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+  <title>TTAi Control Login</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background:#0b1020; color:#e5e7eb; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+    .card { width:min(420px, 92vw); background:#131a2b; border:1px solid #24304a; border-radius:16px; padding:28px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+    h1 { margin:0 0 8px; font-size:24px; }
+    p { color:#94a3b8; margin:0 0 20px; }
+    input { width:100%; box-sizing:border-box; padding:12px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#e5e7eb; margin-bottom:12px; }
+    button { width:100%; padding:12px 14px; border:none; border-radius:10px; background:#2563eb; color:white; font-weight:600; cursor:pointer; }
+    .error { color:#fca5a5; min-height:20px; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div class=\"card\">
+    <h1>TTAi Control</h1>
+    <p>Enter admin token to open the control console.</p>
+    <form id=\"login-form\">
+      <input id=\"token\" type=\"password\" placeholder=\"Admin token\" autocomplete=\"current-password\" required />
+      <button type=\"submit\">Open Control Dashboard</button>
+      <div id=\"error\" class=\"error\"></div>
+    </form>
+  </div>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const token = document.getElementById('token').value;
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = '';
+      const response = await fetch('/control-auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      if (response.ok) {
+        window.location.href = '/control/';
+        return;
+      }
+      const payload = await response.json().catch(() => ({}));
+      errorEl.textContent = payload.detail || 'Login failed';
+    });
+  </script>
+</body>
+</html>
+"""
+
+class ControlLoginRequest(BaseModel):
+    token: str
+
+@app.get("/control-login", response_class=HTMLResponse)
+async def control_login_page():
+    return CONTROL_LOGIN_HTML
+
+@app.post("/control-auth/login")
+async def control_auth_login(payload: ControlLoginRequest, response: Response):
+    if not validate_admin_token(payload.token):
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+
+    response.set_cookie(
+        key=CONTROL_SESSION_COOKIE,
+        value=payload.token,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=60 * 60 * 12,
+        path="/",
+    )
+    return {"ok": True}
+
+@app.post("/control-auth/logout")
+async def control_auth_logout(response: Response, current_user = Depends(get_current_control_user)):
+    response.delete_cookie(CONTROL_SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+@app.get("/control-auth/session")
+async def control_auth_session(current_user = Depends(get_current_control_user)):
+    return {"ok": True, "user": current_user}
 
 # Models
 class ChatRequest(BaseModel):
@@ -1696,6 +1779,7 @@ async def admin_quota_blocked(
 async def control_overview(
     usage_limit: int = Query(default=200, ge=1, le=5000),
     recent_events_limit: int = Query(default=20, ge=1, le=100),
+    current_user = Depends(get_current_control_user),
 ):
     recent_events = read_usage_events(limit=usage_limit)
     usage_summary = summarize_usage_events(recent_events)
@@ -1764,6 +1848,7 @@ async def control_overview(
 async def control_quota(
     limit: int = Query(default=200, ge=1, le=5000),
     recent_limit: int = Query(default=20, ge=1, le=100),
+    current_user = Depends(get_current_control_user),
 ):
     events = read_usage_events(limit=limit)
     blocked_events = [
@@ -1793,7 +1878,7 @@ async def control_quota(
     }
 
 @app.get("/control-api/billing")
-async def control_billing(limit: int = Query(default=200, ge=1, le=5000)):
+async def control_billing(limit: int = Query(default=200, ge=1, le=5000), current_user = Depends(get_current_control_user)):
     events = read_usage_events(limit=limit)
     summary = summarize_billing_usage(events)
     return {
@@ -1808,6 +1893,7 @@ async def control_billing(limit: int = Query(default=200, ge=1, le=5000)):
 async def control_errors(
     limit: int = Query(default=200, ge=1, le=5000),
     top_n: int = Query(default=10, ge=1, le=50),
+    current_user = Depends(get_current_control_user),
 ):
     events = read_usage_events(limit=limit)
     error_events = [event for event in events if event.get("status") not in (None, "success")]
@@ -1848,7 +1934,7 @@ async def control_errors(
     }
 
 @app.get("/control-api/models")
-async def control_models():
+async def control_models(current_user = Depends(get_current_control_user)):
     models_status = await get_models_status()
     lb_providers = await get_providers()
     lb_metrics = await get_loadbalancer_metrics()
@@ -1886,7 +1972,7 @@ async def control_models():
     }
 
 @app.get("/control-api/system")
-async def control_system():
+async def control_system(current_user = Depends(get_current_control_user)):
     health_summary = await collector_service.health_summary()
     workloads = await collector_service.workloads()
     alerts = await collector_service.alerts()
@@ -1911,7 +1997,7 @@ async def control_system():
     }
 
 @app.get("/control-api/usage")
-async def control_usage(limit: int = Query(default=20, ge=5, le=100)):
+async def control_usage(limit: int = Query(default=20, ge=5, le=100), current_user = Depends(get_current_control_user)):
     summary_response = await admin_usage_summary(limit=500)
     events_response = await admin_usage_events(limit=200)
 

@@ -132,6 +132,11 @@ async function fetchAPI(endpoint, options = {}) {
             headers
         });
         
+        if (response.status === 401 || response.status === 403) {
+            window.location.href = '/control-login';
+            throw new Error('Control authentication required');
+        }
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
