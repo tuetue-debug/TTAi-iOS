@@ -913,13 +913,11 @@ function renderModels() {
                                 <div class="panel-meta">${provider.type} · ${formatShortLabel(provider.model, 28)} · weight ${provider.weight}</div>
                             </div>
                             <div class="panel-actions-inline">
-                                <span class="badge ${provider.enabled ? 'badge-info' : 'badge-default'}">${provider.enabled ? 'enabled' : 'disabled'}</span>
                                 ${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}
                                 <button class="toggle-switch ${provider.enabled ? 'is-on' : 'is-off'}" data-action="toggle-provider" data-target="${provider.name}" data-enabled="${provider.enabled ? '1' : '0'}" aria-label="Toggle provider ${provider.name}">
                                     <span class="toggle-track">
                                         <span class="toggle-thumb"></span>
                                     </span>
-                                    <span class="toggle-label">${provider.enabled ? 'On' : 'Off'}</span>
                                 </button>
                             </div>
                         </div>
@@ -952,8 +950,8 @@ function renderModels() {
                         <th>Type</th>
                         <th>Model</th>
                         <th>Weight</th>
-                        <th>Enabled</th>
                         <th>Health</th>
+                        <th>Route</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -963,8 +961,8 @@ function renderModels() {
                             <td>${provider.type}</td>
                             <td>${provider.model}</td>
                             <td>${provider.weight}</td>
-                            <td><span class="badge ${provider.enabled ? 'badge-info' : 'badge-default'}">${provider.enabled ? 'enabled' : 'disabled'}</span></td>
                             <td>${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}</td>
+                            <td>${provider.enabled ? 'ON' : 'OFF'}</td>
                         </tr>
                     `).join('')}
                 </tbody>

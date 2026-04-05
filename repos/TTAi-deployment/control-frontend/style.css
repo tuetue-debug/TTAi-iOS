@@ -510,13 +510,6 @@ body {
     background-color: rgba(71, 85, 105, 0.45);
 }
 
-.toggle-label {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-secondary);
-}
 
 .toggle-switch:disabled {
     opacity: 0.6;
