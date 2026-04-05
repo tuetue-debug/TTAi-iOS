@@ -18,12 +18,13 @@
 - **Status:** Phase 1 COMPLETE - Full stack operational on Dell Zx0Q
 - **Architecture Direction (2026-04-05):** Confirmed 3-surface product split for TTAi API Model:
   - `chat.tuetue.vn` = end-user/product UI for chat experience, later login/packages/subscriptions/user usage
-  - `control.tuetue.vn` = operator/admin control dashboard for system/core/model/Ollama/provider management
-  - `api.tuetue.vn` = FastAPI backend core for chat, metering, quota, billing, admin APIs, and future auth/tenant/api-key logic
+  - `control.tuetue.vn` = operator/admin control dashboard for system/core/model/Ollama/provider management and is a primary product surface
+  - `api.tuetue.vn` = FastAPI backend core for chat, metering, quota, billing, admin APIs, and future auth/tenant/api-key logic; also a primary system surface
+- **Priority Clarification (2026-04-05):** `control.tuetue.vn` and `api.tuetue.vn` are the main surfaces that matter most right now. WordPress admin/plugin integration is secondary/supporting only and should not drive core architecture decisions.
 - **Core Identity:** `TTAi Super Model Hybrid` is the main backend/core intelligence layer of the system and is intended to evolve into Tuệ Tuệ's own model/core brain over time.
 - **Boundary Decision:** Do not put quota/billing/core backend logic directly inside WordPress. WordPress should remain public-site/content/docs/marketing, while control and product surfaces call into FastAPI backend APIs.
 - **System Design Rule:** `control.tuetue.vn` should be primarily admin UI/control console, while `api.tuetue.vn` remains the control-plane/business-logic backend. Avoid mixing control UI with backend state logic.
-- **Execution Order Decision:** Near-term execution should proceed in this order: (1) stabilize/deploy API backend and admin foundations, (2) build `control.tuetue.vn` MVP admin console on top of backend APIs, (3) build `chat.tuetue.vn` user/product surface with login, plans, subscriptions, and usage views.
+- **Execution Order Decision:** Near-term execution should proceed in this order: (1) stabilize/deploy API backend and admin foundations, (2) build `control.tuetue.vn` MVP admin console on top of backend APIs as the main control surface, (3) build `chat.tuetue.vn` user/product surface with login, plans, subscriptions, and usage views. WordPress admin can support this work but is not the main destination.
 - **Decision:** Abandoned Oracle Cloud due to account/capacity issues
 - **Decision:** Pivoted to local Docker-based stack (FastAPI + PostgreSQL + Redis + WordPress)
 - **Decision:** WordPress MySQL pivot after PostgreSQL PHP extension failures
