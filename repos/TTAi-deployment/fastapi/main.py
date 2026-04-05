@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 # Import services
 from ollama_service import ollama_service
-from load_balancer import load_balancer, QueryComplexity
+from load_balancer import load_balancer, QueryComplexity, ProviderType
 from query_classifier import query_classifier, ClassificationResult
 from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
@@ -325,7 +325,7 @@ async def chat(request: ChatRequest):
                     # Retry with fallback provider
                     if provider.provider_type.value == "cli_proxy":
                         # Use CLI Proxy
-                        default_cli_proxy = "https://vannt.vinaddns.com:8317"
+                        default_cli_proxy = "https://127.0.0.1:8317"
                         cli_proxy_url = os.getenv("CLI_PROXY_URL", default_cli_proxy).rstrip("/") or default_cli_proxy
                         cli_proxy_key = os.getenv("CLI_PROXY_API_KEY", "").strip()
                         
@@ -336,8 +336,10 @@ async def chat(request: ChatRequest):
                         proxy_model = provider.endpoint
                         if proxy_model.startswith("cliproxy/"):
                             proxy_model = proxy_model.split("/", 1)[1]
+                        if proxy_model == "gpt-5.1-codex":
+                            proxy_model = "gpt-mini"
                         
-                        async with httpx.AsyncClient(timeout=provider.timeout) as client:
+                        async with httpx.AsyncClient(timeout=provider.timeout, verify=False) as client:
                             response = await client.post(
                                 f"{cli_proxy_url}/v1/chat/completions",
                                 json={
@@ -357,11 +359,11 @@ async def chat(request: ChatRequest):
                         # GPT direct or other providers
                         response_text = f"[{provider.name} response placeholder - Ollama fallback]"
                 else:
-                    response_text = "Xin lá»—i, há»‡ thá»‘ng AI táº¡m thá»i gáº·p sá»± cá»‘. Vui lÃ²ng thá»­ láº¡i sau."
+                    response_text = "Xin lỗi, hệ thống AI tạm thời gặp sự cố. Vui lòng thử lại sau."
             
         elif provider.provider_type.value == "cli_proxy":
             # Use CLI Proxy
-            default_cli_proxy = "https://vannt.vinaddns.com:8317"
+            default_cli_proxy = "https://127.0.0.1:8317"
             cli_proxy_url = os.getenv("CLI_PROXY_URL", default_cli_proxy).rstrip("/") or default_cli_proxy
             cli_proxy_key = os.getenv("CLI_PROXY_API_KEY", "").strip()
             
@@ -372,8 +374,10 @@ async def chat(request: ChatRequest):
             proxy_model = provider.endpoint
             if proxy_model.startswith("cliproxy/"):
                 proxy_model = proxy_model.split("/", 1)[1]
+            if proxy_model == "gpt-5.1-codex":
+                proxy_model = "gpt-mini"
             
-            async with httpx.AsyncClient(timeout=provider.timeout) as client:
+            async with httpx.AsyncClient(timeout=provider.timeout, verify=False) as client:
                 response = await client.post(
                     f"{cli_proxy_url}/v1/chat/completions",
                     json={
@@ -714,10 +718,10 @@ async def hybrid_chat(request: ChatRequest):
 async def test_classification():
     """Test query classification with sample queries"""
     test_queries = [
-        "Xin chÃ o",
-        "Thá»i tiáº¿t hÃ´m nay tháº¿ nÃ o?",
-        "Giáº£i thÃ­ch vá» machine learning",
-        "Viáº¿t function Python Ä‘á»ƒ xá»­ lÃ½ JSON vÃ  káº¿t ná»‘i database MySQL",
+        "Xin chào",
+        "Thời tiết hôm nay thế nào?",
+        "Giải thích về machine learning",
+        "Viết function Python để xử lý JSON và kết nối database MySQL",
         "How are you today?",
         "Explain the theory of relativity",
         "Create a React component with TypeScript and Tailwind CSS"
