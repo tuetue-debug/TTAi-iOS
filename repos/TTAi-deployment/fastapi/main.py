@@ -143,6 +143,33 @@ def estimate_cost(model_name: Optional[str], total_tokens_est: int, provider_typ
         "cost_estimate_mode": None
     }
 
+
+def classify_billable_flags(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
+    user_id = (user_id or "anonymous").strip().lower()
+
+    non_billable_prefixes = (
+        "metering_",
+        "smoke_",
+        "cost_estimation_",
+        "test_",
+        "debug_",
+        "internal_",
+    )
+
+    non_billable_exact = {
+        "anonymous",
+        "admin",
+        "system",
+    }
+
+    is_non_billable = user_id in non_billable_exact or any(user_id.startswith(prefix) for prefix in non_billable_prefixes)
+
+    return {
+        "quota_billable": not is_non_billable,
+        "billing_billable": not is_non_billable,
+        "billable_mode": "user_id_rule_v1",
+    }
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI"""
@@ -496,6 +523,7 @@ async def chat(request: ChatRequest):
         output_tokens_est = estimate_tokens(response_text)
         total_tokens_est = input_tokens_est + output_tokens_est
         cost_info = estimate_cost(provider.model, total_tokens_est, provider_type)
+        billable_flags = classify_billable_flags(user_id=user_id)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -520,8 +548,9 @@ async def chat(request: ChatRequest):
             "token_count_mode": "estimated_chars_div_4",
             "estimated_cost": cost_info["estimated_cost"],
             "cost_estimate_mode": cost_info["cost_estimate_mode"],
-            "quota_billable": True,
-            "billing_billable": False,
+            "quota_billable": billable_flags["quota_billable"],
+            "billing_billable": billable_flags["billing_billable"],
+            "billable_mode": billable_flags["billable_mode"],
             "processing_time": processing_time,
             "fallback_used": fallback_used,
             "fallback_target": provider.name if fallback_used else None,
@@ -552,6 +581,7 @@ async def chat(request: ChatRequest):
         total_tokens_est = input_tokens_est
         event_model = provider.model if provider else None
         cost_info = estimate_cost(event_model, total_tokens_est, provider_type)
+        billable_flags = classify_billable_flags(user_id=user_id)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -576,8 +606,9 @@ async def chat(request: ChatRequest):
             "token_count_mode": "estimated_chars_div_4",
             "estimated_cost": cost_info["estimated_cost"],
             "cost_estimate_mode": cost_info["cost_estimate_mode"],
-            "quota_billable": True,
-            "billing_billable": False,
+            "quota_billable": billable_flags["quota_billable"],
+            "billing_billable": billable_flags["billing_billable"],
+            "billable_mode": billable_flags["billable_mode"],
             "processing_time": processing_time,
             "fallback_used": fallback_used,
             "fallback_target": provider.name if fallback_used and provider else None,
@@ -598,6 +629,7 @@ async def chat(request: ChatRequest):
         total_tokens_est = input_tokens_est
         event_model = provider.model if provider else None
         cost_info = estimate_cost(event_model, total_tokens_est, provider_type)
+        billable_flags = classify_billable_flags(user_id=user_id)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -622,8 +654,9 @@ async def chat(request: ChatRequest):
             "token_count_mode": "estimated_chars_div_4",
             "estimated_cost": cost_info["estimated_cost"],
             "cost_estimate_mode": cost_info["cost_estimate_mode"],
-            "quota_billable": True,
-            "billing_billable": False,
+            "quota_billable": billable_flags["quota_billable"],
+            "billing_billable": billable_flags["billing_billable"],
+            "billable_mode": billable_flags["billable_mode"],
             "processing_time": processing_time,
             "fallback_used": fallback_used,
             "fallback_target": provider.name if fallback_used and provider else None,
