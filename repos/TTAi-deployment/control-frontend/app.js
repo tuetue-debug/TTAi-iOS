@@ -25,15 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
     const allowedPages = ['overview', 'quota', 'billing', 'errors'];
     if (allowedPages.includes(initialHashPage)) {
-        switchPage(initialHashPage);
+        switchPage(initialHashPage, false);
     } else {
+        setActivePage(currentPage);
         loadPage(currentPage);
     }
 
     window.addEventListener('hashchange', () => {
         const hashPage = (window.location.hash || '#overview').replace('#', '');
         if (allowedPages.includes(hashPage) && hashPage !== currentPage) {
-            switchPage(hashPage);
+            switchPage(hashPage, false);
         }
     });
     
@@ -57,9 +58,7 @@ function initNavigation() {
     });
 }
 
-function switchPage(page) {
-    window.location.hash = page;
-
+function setActivePage(page) {
     // Update active nav item
     navItems.forEach(item => {
         item.classList.remove('active');
@@ -67,7 +66,7 @@ function switchPage(page) {
             item.classList.add('active');
         }
     });
-    
+
     // Update page title
     const pageTitles = {
         overview: 'Overview',
@@ -79,7 +78,7 @@ function switchPage(page) {
         usage: 'Usage'
     };
     pageTitle.textContent = pageTitles[page] || 'Dashboard';
-    
+
     // Show/hide pages
     pages.forEach(p => {
         p.classList.remove('active');
@@ -87,8 +86,15 @@ function switchPage(page) {
             p.classList.add('active');
         }
     });
-    
+
     currentPage = page;
+}
+
+function switchPage(page, updateHash = true) {
+    setActivePage(page);
+    if (updateHash && window.location.hash !== `#${page}`) {
+        window.location.hash = page;
+    }
     loadPage(page);
 }
 
@@ -206,6 +212,15 @@ function formatShortLabel(value, maxLength = 18) {
     if (!value) return '--';
     const text = String(value);
     return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function formatCost(value) {
+    const num = Number(value || 0);
+    if (Number.isNaN(num)) return '$0.00';
+    if (num === 0) return '$0.00';
+    if (num < 0.001) return `$${num.toFixed(6)}`;
+    if (num < 1) return `$${num.toFixed(4)}`;
+    return `$${num.toFixed(2)}`;
 }
 
 // Overview page
@@ -538,7 +553,7 @@ function renderBilling() {
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Billing</div>
                 <div class="kpi-title">Total Estimated Cost</div>
-                <div class="kpi-value neutral">$${summary.total_estimated_cost || '0.00'}</div>
+                <div class="kpi-value neutral">${formatCost(summary.total_estimated_cost)}</div>
                 <div class="kpi-trend">
                     <i class="fas fa-dollar-sign"></i>
                     <span>All events</span>
@@ -548,7 +563,7 @@ function renderBilling() {
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Billable</div>
                 <div class="kpi-title">Billable Cost</div>
-                <div class="kpi-value neutral">$${summary.billable_estimated_cost || '0.00'}</div>
+                <div class="kpi-value neutral">${formatCost(summary.billable_estimated_cost)}</div>
                 <div class="kpi-trend">
                     <i class="fas fa-receipt"></i>
                     <span>Chargeable</span>
@@ -587,7 +602,7 @@ function renderBilling() {
                         Object.entries(tenantBreakdown).slice(0, 5).map(([tenant, cost]) => `
                             <div class="panel-row">
                                 <span class="panel-label">${tenant}</span>
-                                <span class="panel-value">$${cost.toFixed(2)}</span>
+                                <span class="panel-value">${formatCost(cost)}</span>
                             </div>
                         `).join('') : 
                         `<div class="panel-row">
@@ -607,8 +622,8 @@ function renderBilling() {
                     ${Object.entries(apiKeyBreakdown).length > 0 ? 
                         Object.entries(apiKeyBreakdown).slice(0, 5).map(([key, cost]) => `
                             <div class="panel-row">
-                                <span class="panel-label">${key.substring(0, 12)}...</span>
-                                <span class="panel-value">$${cost.toFixed(2)}</span>
+                                <span class="panel-label">${formatShortLabel(key, 12)}</span>
+                                <span class="panel-value">${formatCost(cost)}</span>
                             </div>
                         `).join('') : 
                         `<div class="panel-row">
@@ -629,7 +644,7 @@ function renderBilling() {
                         Object.entries(providerBreakdown).slice(0, 5).map(([provider, cost]) => `
                             <div class="panel-row">
                                 <span class="panel-label">${provider}</span>
-                                <span class="panel-value">$${cost.toFixed(2)}</span>
+                                <span class="panel-value">${formatCost(cost)}</span>
                             </div>
                         `).join('') : 
                         `<div class="panel-row">
