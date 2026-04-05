@@ -20,6 +20,8 @@ const pageTitle = document.querySelector('.page-title');
 const refreshBtn = document.getElementById('refresh-btn');
 const logoutBtn = document.getElementById('logout-btn');
 const currentTimeEl = document.getElementById('current-time');
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebar-toggle');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -33,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'about'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -59,6 +61,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.warn('Logout request failed', error);
         }
         window.location.href = '/control-login';
+    });
+
+    sidebarToggle?.addEventListener('click', () => {
+        sidebar?.classList.toggle('collapsed');
+        document.body.classList.toggle('sidebar-collapsed');
     });
 });
 
@@ -94,7 +101,8 @@ function setActivePage(page) {
         errors: 'Errors',
         models: 'Models',
         system: 'System',
-        usage: 'Usage'
+        usage: 'Usage',
+        about: 'About'
     };
     pageTitle.textContent = pageTitles[page] || 'Dashboard';
 
@@ -198,6 +206,9 @@ async function loadPage(page) {
                 break;
             case 'usage':
                 await loadUsage();
+                break;
+            case 'about':
+                renderAbout();
                 break;
             default:
                 pageEl.innerHTML = `
@@ -1451,6 +1462,64 @@ function renderUsage() {
                     `).join('') : '<tr><td colspan="6">No recent events</td></tr>'}
                 </tbody>
             </table>
+        </div>
+    `;
+}
+
+function renderAbout() {
+    const pageEl = document.getElementById('page-about');
+    pageEl.innerHTML = `
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">About</div>
+                <div class="kpi-title">TTAi Control</div>
+                <div class="kpi-value neutral">v0.1</div>
+                <div class="kpi-trend"><i class="fas fa-circle-info"></i><span>Operator dashboard</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Purpose</div>
+                <div class="kpi-title">Control Surface</div>
+                <div class="kpi-value neutral">Admin</div>
+                <div class="kpi-trend"><i class="fas fa-shield-halved"></i><span>System operations</span></div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">What this dashboard is for</div>
+                    <div class="panel-subtitle">High-level guidance</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Monitor health</span><span class="panel-value">Providers, models, system</span></div>
+                    <div class="panel-row"><span class="panel-label">Operate safely</span><span class="panel-value">Run guarded admin actions</span></div>
+                    <div class="panel-row"><span class="panel-label">Review usage</span><span class="panel-value">Quota, billing, errors, traffic</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">How to use</div>
+                    <div class="panel-subtitle">Quick operator notes</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Models tab</span><span class="panel-value">Warm up and toggle providers</span></div>
+                    <div class="panel-row"><span class="panel-label">System tab</span><span class="panel-value">Run safe maintenance actions</span></div>
+                    <div class="panel-row"><span class="panel-label">Usage / Errors</span><span class="panel-value">Inspect live behavior and failures</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Important notes</div>
+                    <div class="panel-subtitle">Current behavior</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Healthy vs Enabled</span><span class="panel-value">Health and routing are separate states</span></div>
+                    <div class="panel-row"><span class="panel-label">Guardrails</span><span class="panel-value">Sensitive actions ask for confirmation</span></div>
+                    <div class="panel-row"><span class="panel-label">Feedback</span><span class="panel-value">Toasts show action result quickly</span></div>
+                </div>
+            </div>
         </div>
     `;
 }

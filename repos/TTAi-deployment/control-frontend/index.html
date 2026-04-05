@@ -10,12 +10,15 @@
 <body>
     <div class="app">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
                     <i class="fas fa-brain"></i>
                     <span>TTAi Control</span>
                 </div>
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
             <nav class="sidebar-nav">
                 <a href="#overview" class="nav-item active" data-page="overview">
@@ -46,6 +49,10 @@
                 <a href="#usage" class="nav-item" data-page="usage">
                     <i class="fas fa-chart-bar"></i>
                     <span>Usage</span>
+                </a>
+                <a href="#about" class="nav-item" data-page="about">
+                    <i class="fas fa-circle-info"></i>
+                    <span>About</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
@@ -87,6 +94,7 @@
                 <div id="page-models" class="page"></div>
                 <div id="page-system" class="page"></div>
                 <div id="page-usage" class="page"></div>
+                <div id="page-about" class="page"></div>
             </div>
         </main>
     </div>

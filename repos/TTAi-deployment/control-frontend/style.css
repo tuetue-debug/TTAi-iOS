@@ -47,11 +47,16 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    transition: width var(--transition), transform var(--transition);
 }
 
 .sidebar-header {
-    padding: 24px 20px;
+    min-height: 88px;
+    padding: 18px 20px;
     border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .logo {
@@ -60,6 +65,21 @@ body {
     gap: 12px;
     font-size: 20px;
     font-weight: 700;
+}
+
+.sidebar-toggle {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+    color: var(--text-primary);
+    border-color: rgba(148, 163, 184, 0.4);
 }
 
 .logo i {
@@ -76,7 +96,7 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 14px 20px;
+    padding: 12px 20px;
     color: var(--text-secondary);
     text-decoration: none;
     transition: var(--transition);
@@ -155,7 +175,8 @@ body {
 .topbar {
     background-color: var(--bg-topbar);
     border-bottom: 1px solid var(--border);
-    padding: 16px 24px;
+    min-height: 88px;
+    padding: 14px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -897,6 +918,22 @@ body {
     word-break: break-word;
 }
 
+.sidebar.collapsed {
+    width: 88px;
+}
+
+.sidebar.collapsed .logo span,
+.sidebar.collapsed .nav-item span,
+.sidebar.collapsed .sidebar-footer {
+    display: none;
+}
+
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
 @media (max-width: 768px) {
     .app {
         flex-direction: column;
@@ -911,13 +948,13 @@ body {
     .sidebar-nav {
         display: flex;
         overflow-x: auto;
-        padding: 10px 0;
+        padding: 8px 0;
     }
     
     .nav-item {
         flex-direction: column;
-        padding: 10px;
-        min-width: 80px;
+        padding: 10px 12px;
+        min-width: 82px;
         border-left: none;
         border-bottom: 3px solid transparent;
     }
