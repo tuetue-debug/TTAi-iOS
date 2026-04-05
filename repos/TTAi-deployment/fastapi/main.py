@@ -1850,8 +1850,8 @@ async def control_errors(
 @app.get("/control-api/models")
 async def control_models():
     models_status = await get_models_status()
-    lb_providers = await get_load_balancer_providers()
-    lb_metrics = await get_load_balancer_metrics()
+    lb_providers = await get_providers()
+    lb_metrics = await get_loadbalancer_metrics()
     ollama = await ollama_health()
     ollama_models_resp = await get_ollama_models()
 
