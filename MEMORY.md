@@ -16,6 +16,14 @@
 ## Active Projects & Decisions
 ### TTAi Project (Active)
 - **Status:** Phase 1 COMPLETE - Full stack operational on Dell Zx0Q
+- **Architecture Direction (2026-04-05):** Confirmed 3-surface product split for TTAi API Model:
+  - `chat.tuetue.vn` = end-user/product UI for chat experience, later login/packages/subscriptions/user usage
+  - `control.tuetue.vn` = operator/admin control dashboard for system/core/model/Ollama/provider management
+  - `api.tuetue.vn` = FastAPI backend core for chat, metering, quota, billing, admin APIs, and future auth/tenant/api-key logic
+- **Core Identity:** `TTAi Super Model Hybrid` is the main backend/core intelligence layer of the system and is intended to evolve into Tuệ Tuệ's own model/core brain over time.
+- **Boundary Decision:** Do not put quota/billing/core backend logic directly inside WordPress. WordPress should remain public-site/content/docs/marketing, while control and product surfaces call into FastAPI backend APIs.
+- **System Design Rule:** `control.tuetue.vn` should be primarily admin UI/control console, while `api.tuetue.vn` remains the control-plane/business-logic backend. Avoid mixing control UI with backend state logic.
+- **Execution Order Decision:** Near-term execution should proceed in this order: (1) stabilize/deploy API backend and admin foundations, (2) build `control.tuetue.vn` MVP admin console on top of backend APIs, (3) build `chat.tuetue.vn` user/product surface with login, plans, subscriptions, and usage views.
 - **Decision:** Abandoned Oracle Cloud due to account/capacity issues
 - **Decision:** Pivoted to local Docker-based stack (FastAPI + PostgreSQL + Redis + WordPress)
 - **Decision:** WordPress MySQL pivot after PostgreSQL PHP extension failures
@@ -65,3 +73,6 @@
 15. **Aggressive Timeline Management:** Regular progress checks against timeline; Identify blockers early; Adjust timeline based on actual progress vs planned milestones
 16. **SSH/Remote Access:** Test SSH connections early in deployment process; Have alternative deployment methods ready (manual copy, different authentication methods)
 17. **FastAPI + CLI Proxy Integration:** For local TTAi FastAPI 8000, prefer local CLI proxy at `https://127.0.0.1:8317` with internal TLS verify disabled in code, ensure NSSM service `TTAiFastAPI8000` has `CLI_PROXY_API_KEY=cliproxy-dev-token`, and use `TTAi_FASTAPI_CLIPROXY_FIX_NOTES_2026-04-05.md` as the detailed runbook for future incidents.
+18. **Architecture Separation:** For TTAi, keep product UI (`chat.*`), admin/control UI (`control.*`), and backend core (`api.*`) as separate surfaces with clear boundaries. Let UIs call backend APIs; do not collapse backend logic into WordPress/CMS.
+19. **Control Plane Design:** `control.tuetue.vn` should be an admin console backed by APIs, not the place where core business logic lives. Keep system/model/provider control actions in FastAPI endpoints and let the dashboard consume them.
+20. **Roadmap Discipline:** Build TTAi in layered order: backend core first, then admin/control console, then customer/product surface. This reduces churn and keeps quota/billing/auth foundations reusable.

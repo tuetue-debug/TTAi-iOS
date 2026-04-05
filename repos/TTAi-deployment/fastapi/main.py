@@ -484,6 +484,36 @@ class ModelStatusResponse(BaseModel):
     error_count: int
     is_ready: bool
 
+# Route group constants
+API_V1_CHAT = "/api/v1/chat"
+API_V1_CLASSIFY = "/api/v1/classify"
+API_V1_CLASSIFY_BATCH = "/api/v1/classify/batch"
+API_V1_SYSTEM_HEALTH = "/api/v1/system/health"
+API_V1_SYSTEM_HEALTH_DETAILED = "/api/v1/system/health/detailed"
+API_V1_SYSTEM_LOADBALANCER_METRICS = "/api/v1/system/loadbalancer/metrics"
+API_V1_SYSTEM_LOADBALANCER_PROVIDERS = "/api/v1/system/loadbalancer/providers"
+API_V1_SYSTEM_LOADBALANCER_DISABLE = "/api/v1/system/loadbalancer/providers/{provider_name}/disable"
+API_V1_SYSTEM_LOADBALANCER_ENABLE = "/api/v1/system/loadbalancer/providers/{provider_name}/enable"
+API_V1_MODELS_STATUS = "/api/v1/models/status"
+API_V1_MODELS_STATUS_ITEM = "/api/v1/models/status/{model_name}"
+API_V1_MODELS_WARMUP_ITEM = "/api/v1/models/warmup/{model_name}"
+API_V1_MODELS_WARMUP_ALL = "/api/v1/models/warmup/all"
+API_V1_USERS = "/api/v1/users"
+API_V1_OLLAMA_MODELS = "/api/v1/ollama/models"
+API_V1_OLLAMA_HEALTH = "/api/v1/ollama/health"
+API_V1_OLLAMA_GENERATE = "/api/v1/ollama/generate"
+API_V1_OLLAMA_CHAT = "/api/v1/ollama/chat"
+API_V1_HYBRID_CHAT = "/api/v1/hybrid/chat"
+API_V1_TEST_CLASSIFICATION = "/api/v1/test/classification"
+API_V1_TEST_LOADBALANCER = "/api/v1/test/loadbalancer"
+API_V1_ADMIN_USAGE_EVENTS = "/api/v1/admin/usage/events"
+API_V1_ADMIN_USAGE_SUMMARY = "/api/v1/admin/usage/summary"
+API_V1_ADMIN_USAGE_USER = "/api/v1/admin/usage/users/{target_user_id}"
+API_V1_ADMIN_USAGE_BILLING_SUMMARY = "/api/v1/admin/usage/billing-summary"
+API_V1_ADMIN_BILLING_CONFIG = "/api/v1/admin/billing/config"
+API_V1_ADMIN_QUOTA_STATUS = "/api/v1/admin/quota/status"
+API_V1_ADMIN_QUOTA_STATUS_USER = "/api/v1/admin/quota/status/users/{target_user_id}"
+
 # Health check
 @app.get("/")
 async def root():
@@ -501,6 +531,7 @@ async def root():
     }
 
 @app.get("/health")
+@app.get(API_V1_SYSTEM_HEALTH)
 async def health():
     """Comprehensive health check"""
     ollama_healthy = await ollama_service.health_check()
@@ -521,6 +552,7 @@ async def health():
     }
 
 @app.get("/health/detailed")
+@app.get(API_V1_SYSTEM_HEALTH_DETAILED)
 async def health_detailed():
     """Detailed health check with all components"""
     ollama_healthy = await ollama_service.health_check()
@@ -542,6 +574,7 @@ async def health_detailed():
 
 # AI Chat endpoint with Load Balancing
 @app.post("/api/chat", response_model=ChatResponse)
+@app.post(API_V1_CHAT, response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
     x_ttai_api_key_id: Optional[str] = Header(default=None),
@@ -951,6 +984,7 @@ async def chat(
 
 # Admin usage metering read endpoints
 @app.get("/api/admin/usage/events")
+@app.get(API_V1_ADMIN_USAGE_EVENTS)
 async def admin_usage_events(
     limit: int = Query(default=100, ge=1, le=1000),
     user_id: Optional[str] = None,
@@ -997,6 +1031,7 @@ async def admin_usage_events(
 
 
 @app.get("/api/admin/usage/summary")
+@app.get(API_V1_ADMIN_USAGE_SUMMARY)
 async def admin_usage_summary(
     limit: int = Query(default=500, ge=1, le=5000),
     user_id: Optional[str] = None,
@@ -1042,6 +1077,7 @@ async def admin_usage_summary(
 
 
 @app.get("/api/admin/usage/users/{target_user_id}")
+@app.get(API_V1_ADMIN_USAGE_USER)
 async def admin_usage_by_user(
     target_user_id: str,
     limit: int = Query(default=100, ge=1, le=1000),
@@ -1089,12 +1125,14 @@ async def admin_usage_by_user(
 
 # Query Classification endpoints
 @app.post("/api/classify", response_model=ClassificationResponse)
+@app.post(API_V1_CLASSIFY, response_model=ClassificationResponse)
 async def classify_query(request: ClassificationRequest):
     """Classify a query without processing it"""
     classification = query_classifier.classify(request.query)
     return ClassificationResponse(**classification.to_dict())
 
 @app.post("/api/classify/batch")
+@app.post(API_V1_CLASSIFY_BATCH)
 async def classify_batch(queries: List[str]):
     """Classify multiple queries at once"""
     results = query_classifier.batch_classify(queries)
@@ -1106,11 +1144,13 @@ async def classify_batch(queries: List[str]):
 
 # Load Balancer endpoints
 @app.get("/api/loadbalancer/metrics", response_model=LoadBalancerMetrics)
+@app.get(API_V1_SYSTEM_LOADBALANCER_METRICS, response_model=LoadBalancerMetrics)
 async def get_loadbalancer_metrics():
     """Get load balancer metrics"""
     return LoadBalancerMetrics(**load_balancer.get_metrics())
 
 @app.get("/api/loadbalancer/providers")
+@app.get(API_V1_SYSTEM_LOADBALANCER_PROVIDERS)
 async def get_providers():
     """Get list of all available providers"""
     providers = []
@@ -1128,6 +1168,7 @@ async def get_providers():
     return {"providers": providers}
 
 @app.post("/api/loadbalancer/providers/{provider_name}/disable")
+@app.post(API_V1_SYSTEM_LOADBALANCER_DISABLE)
 async def disable_provider(provider_name: str):
     """Disable a provider"""
     success = load_balancer.disable_provider(provider_name)
@@ -1137,6 +1178,7 @@ async def disable_provider(provider_name: str):
         raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
 
 @app.post("/api/loadbalancer/providers/{provider_name}/enable")
+@app.post(API_V1_SYSTEM_LOADBALANCER_ENABLE)
 async def enable_provider(provider_name: str):
     """Enable a provider"""
     success = load_balancer.enable_provider(provider_name)
@@ -1147,11 +1189,13 @@ async def enable_provider(provider_name: str):
 
 # Model Management endpoints
 @app.get("/api/models/status")
+@app.get(API_V1_MODELS_STATUS)
 async def get_models_status():
     """Get status of all models"""
     return model_manager.get_all_status()
 
 @app.get("/api/models/status/{model_name}", response_model=ModelStatusResponse)
+@app.get(API_V1_MODELS_STATUS_ITEM, response_model=ModelStatusResponse)
 async def get_model_status(model_name: str):
     """Get status of a specific model"""
     status = model_manager.get_model_status(model_name)
@@ -1161,6 +1205,7 @@ async def get_model_status(model_name: str):
         raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
 
 @app.post("/api/models/warmup/{model_name}")
+@app.post(API_V1_MODELS_WARMUP_ITEM)
 async def warmup_model(model_name: str, timeout: int = 30):
     """Manually warm up a model"""
     success = await model_manager.warmup_model(model_name, timeout)
@@ -1170,6 +1215,7 @@ async def warmup_model(model_name: str, timeout: int = 30):
         raise HTTPException(status_code=500, detail=f"Failed to warm up model {model_name}")
 
 @app.post("/api/models/warmup/all")
+@app.post(API_V1_MODELS_WARMUP_ALL)
 async def warmup_all_models(timeout_per_model: int = 30):
     """Warm up all models"""
     results = await model_manager.warmup_all(timeout_per_model)
@@ -1181,15 +1227,18 @@ async def warmup_all_models(timeout_per_model: int = 30):
 
 # User management endpoints (placeholder)
 @app.get("/api/users")
+@app.get(API_V1_USERS)
 async def get_users():
     return {"users": []}
 
 @app.post("/api/users")
+@app.post(API_V1_USERS)
 async def create_user():
     return {"message": "User created (placeholder)"}
 
 # Ollama endpoints (Step 7 - Hybrid AI Pipeline)
 @app.get("/api/ollama/models")
+@app.get(API_V1_OLLAMA_MODELS)
 async def get_ollama_models():
     """Get list of available Ollama models"""
     try:
@@ -1199,12 +1248,14 @@ async def get_ollama_models():
         raise HTTPException(status_code=500, detail=f"Failed to get Ollama models: {str(e)}")
 
 @app.get("/api/ollama/health")
+@app.get(API_V1_OLLAMA_HEALTH)
 async def ollama_health():
     """Check Ollama service health"""
     is_healthy = await ollama_service.health_check()
     return {"status": "healthy" if is_healthy else "unhealthy", "service": "ollama"}
 
 @app.post("/api/ollama/generate", response_model=OllamaResponse)
+@app.post(API_V1_OLLAMA_GENERATE, response_model=OllamaResponse)
 async def ollama_generate(request: OllamaRequest):
     """Generate text using Ollama model"""
     try:
@@ -1225,6 +1276,7 @@ async def ollama_generate(request: OllamaRequest):
         raise HTTPException(status_code=500, detail=f"Ollama generation failed: {str(e)}")
 
 @app.post("/api/ollama/chat")
+@app.post(API_V1_OLLAMA_CHAT)
 async def ollama_chat(request: OllamaChatRequest):
     """Chat completion using Ollama"""
     try:
@@ -1241,6 +1293,7 @@ async def ollama_chat(request: OllamaChatRequest):
 
 # Legacy hybrid endpoint (backward compatibility)
 @app.post("/api/hybrid/chat", response_model=ChatResponse)
+@app.post(API_V1_HYBRID_CHAT, response_model=ChatResponse)
 async def hybrid_chat(request: ChatRequest):
     """
     Legacy hybrid endpoint - uses new load balancing system
@@ -1249,6 +1302,7 @@ async def hybrid_chat(request: ChatRequest):
 
 # Test endpoints
 @app.get("/api/test/classification")
+@app.get(API_V1_TEST_CLASSIFICATION)
 async def test_classification():
     """Test query classification with sample queries"""
     test_queries = [
@@ -1271,6 +1325,7 @@ async def test_classification():
     }
 
 @app.get("/api/test/loadbalancer")
+@app.get(API_V1_TEST_LOADBALANCER)
 async def test_loadbalancer():
     return {"message": "Load balancer test endpoint"}
 
@@ -1376,6 +1431,7 @@ from control_dashboard import collector_service
 
 # Quota status endpoints
 @app.get("/api/admin/quota/status")
+@app.get(API_V1_ADMIN_QUOTA_STATUS)
 async def admin_quota_status(
     user_id: Optional[str] = None,
     tenant_id: Optional[str] = None,
@@ -1397,6 +1453,7 @@ async def admin_quota_status(
     }
 
 @app.get("/api/admin/quota/status/users/{target_user_id}")
+@app.get(API_V1_ADMIN_QUOTA_STATUS_USER)
 async def admin_quota_status_by_user(
     target_user_id: str,
     tenant_id: Optional[str] = None,
@@ -1418,6 +1475,7 @@ async def admin_quota_status_by_user(
 
 # Billing summary endpoint
 @app.get("/api/admin/usage/billing-summary")
+@app.get(API_V1_ADMIN_USAGE_BILLING_SUMMARY)
 async def admin_billing_summary(
     limit: int = Query(default=500, ge=1, le=5000),
     user_id: Optional[str] = None,
@@ -1463,6 +1521,7 @@ async def admin_billing_summary(
 
 # Billing config management endpoints
 @app.get("/api/admin/billing/config")
+@app.get(API_V1_ADMIN_BILLING_CONFIG)
 async def get_billing_config():
     """Get current billing configuration"""
     config = load_billing_config()
@@ -1473,6 +1532,7 @@ async def get_billing_config():
     }
 
 @app.put("/api/admin/billing/config")
+@app.put(API_V1_ADMIN_BILLING_CONFIG)
 async def update_billing_config(new_config: Dict):
     """Update billing configuration (full replace)"""
     try:
