@@ -340,6 +340,10 @@ function formatPercent(value) {
     return `${(num * 100).toFixed(num > 0 && num < 0.1 ? 1 : 0)}%`;
 }
 
+function renderStatusWithDot(status, tone) {
+    return `<span class="status-pill ${tone}"><span class="status-light ${tone}"></span><span>${status}</span></span>`;
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -910,9 +914,13 @@ function renderModels() {
                             </div>
                             <div class="panel-actions-inline">
                                 <span class="badge ${provider.enabled ? 'badge-info' : 'badge-default'}">${provider.enabled ? 'enabled' : 'disabled'}</span>
-                                <span class="badge ${provider.health === 'healthy' ? 'badge-success' : 'badge-danger'}">${provider.health || 'unknown'}</span>
-                                <button class="btn-mini" data-action="enable-provider" data-target="${provider.name}" ${provider.enabled ? 'disabled' : ''}>Enable</button>
-                                <button class="btn-mini btn-mini-danger" data-action="disable-provider" data-target="${provider.name}" ${provider.enabled ? '' : 'disabled'}>Disable</button>
+                                ${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}
+                                <button class="toggle-switch ${provider.enabled ? 'is-on' : 'is-off'}" data-action="toggle-provider" data-target="${provider.name}" data-enabled="${provider.enabled ? '1' : '0'}" aria-label="Toggle provider ${provider.name}">
+                                    <span class="toggle-track">
+                                        <span class="toggle-thumb"></span>
+                                    </span>
+                                    <span class="toggle-label">${provider.enabled ? 'On' : 'Off'}</span>
+                                </button>
                             </div>
                         </div>
                     `).join('') : '<div class="panel-row"><span class="panel-label">No provider data</span><span class="panel-value">--</span></div>'}
@@ -956,7 +964,7 @@ function renderModels() {
                             <td>${provider.model}</td>
                             <td>${provider.weight}</td>
                             <td><span class="badge ${provider.enabled ? 'badge-info' : 'badge-default'}">${provider.enabled ? 'enabled' : 'disabled'}</span></td>
-                            <td><span class="badge ${provider.health === 'healthy' ? 'badge-success' : 'badge-danger'}">${provider.health || 'unknown'}</span></td>
+                            <td>${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -1002,30 +1010,16 @@ function renderModels() {
         });
     });
 
-    pageEl.querySelectorAll('[data-action="enable-provider"]').forEach(btn => {
+    pageEl.querySelectorAll('[data-action="toggle-provider"]').forEach(btn => {
         btn.addEventListener('click', async () => {
             btn.disabled = true;
+            const isEnabled = btn.dataset.enabled === '1';
             try {
-                const result = await runControlAction('provider_enable', btn.dataset.target);
+                const result = await runControlAction(isEnabled ? 'provider_disable' : 'provider_enable', btn.dataset.target);
                 await loadModels();
-                alert(result.message || 'Provider enabled');
+                alert(result.message || (isEnabled ? 'Provider disabled' : 'Provider enabled'));
             } catch (error) {
-                alert(`Provider enable failed: ${error.message}`);
-            } finally {
-                btn.disabled = false;
-            }
-        });
-    });
-
-    pageEl.querySelectorAll('[data-action="disable-provider"]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            btn.disabled = true;
-            try {
-                const result = await runControlAction('provider_disable', btn.dataset.target);
-                await loadModels();
-                alert(result.message || 'Provider disabled');
-            } catch (error) {
-                alert(`Provider disable failed: ${error.message}`);
+                alert(`Provider toggle failed: ${error.message}`);
             } finally {
                 btn.disabled = false;
             }

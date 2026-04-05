@@ -425,6 +425,104 @@ body {
     cursor: wait;
 }
 
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-light {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+.status-pill.healthy {
+    background-color: rgba(16, 185, 129, 0.16);
+    color: var(--accent-green);
+}
+
+.status-light.healthy {
+    background-color: var(--accent-green);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.75);
+}
+
+.status-pill.unhealthy {
+    background-color: rgba(239, 68, 68, 0.16);
+    color: var(--accent-red);
+}
+
+.status-light.unhealthy {
+    background-color: var(--accent-red);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.75);
+}
+
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0;
+}
+
+.toggle-track {
+    width: 48px;
+    height: 28px;
+    border-radius: 999px;
+    background-color: rgba(148, 163, 184, 0.28);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    position: relative;
+    transition: var(--transition);
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: var(--transition);
+}
+
+.toggle-switch.is-on .toggle-track {
+    background-color: rgba(59, 130, 246, 0.35);
+    border-color: rgba(59, 130, 246, 0.45);
+}
+
+.toggle-switch.is-on .toggle-thumb {
+    transform: translateX(20px);
+}
+
+.toggle-switch.is-off .toggle-track {
+    background-color: rgba(71, 85, 105, 0.45);
+}
+
+.toggle-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.toggle-switch:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 .panel-label {
     color: var(--text-secondary);
     flex: 1;
