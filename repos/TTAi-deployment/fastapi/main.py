@@ -96,6 +96,53 @@ def filter_usage_events(
         filtered = [e for e in filtered if (e.get("request_path") or "") == request_path]
     return filtered
 
+
+COST_RULES_PER_1K_TOKENS = {
+    "cliproxy/gpt-mini": 0.0003,
+    "cliproxy/gemini-pro": 0.00035,
+    "cliproxy/deepseek-chat": 0.00027,
+    "gpt-5.2": 0.0020,
+    "gemma3:4b": 0.0,
+    "qwen3:4b": 0.0,
+    "deepseek-r1:8b": 0.0,
+}
+
+
+def estimate_cost(model_name: Optional[str], total_tokens_est: int, provider_type: Optional[str]) -> Dict:
+    model_name = model_name or ""
+    provider_type = provider_type or "unknown"
+
+    if not total_tokens_est:
+        return {
+            "estimated_cost": 0.0,
+            "cost_estimate_mode": "zero_no_tokens"
+        }
+
+    matched_rate = COST_RULES_PER_1K_TOKENS.get(model_name)
+    if matched_rate is not None:
+        return {
+            "estimated_cost": round((total_tokens_est / 1000.0) * matched_rate, 8),
+            "cost_estimate_mode": "static_per_1k_tokens_v1"
+        }
+
+    if provider_type in ["ollama_local", "ollama_remote"]:
+        return {
+            "estimated_cost": 0.0,
+            "cost_estimate_mode": "assumed_zero_self_hosted_v1"
+        }
+
+    if provider_type == "cli_proxy":
+        fallback_rate = 0.0003
+        return {
+            "estimated_cost": round((total_tokens_est / 1000.0) * fallback_rate, 8),
+            "cost_estimate_mode": "static_cli_proxy_fallback_v1"
+        }
+
+    return {
+        "estimated_cost": None,
+        "cost_estimate_mode": None
+    }
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI"""
@@ -445,6 +492,10 @@ async def chat(request: ChatRequest):
             classification=classification.to_dict()
         )
 
+        input_tokens_est = estimate_tokens(request.message)
+        output_tokens_est = estimate_tokens(response_text)
+        total_tokens_est = input_tokens_est + output_tokens_est
+        cost_info = estimate_cost(provider.model, total_tokens_est, provider_type)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -463,12 +514,12 @@ async def chat(request: ChatRequest):
             "needs_context": classification.needs_context,
             "input_chars": len(request.message or ""),
             "output_chars": len(response_text or ""),
-            "input_tokens_est": estimate_tokens(request.message),
-            "output_tokens_est": estimate_tokens(response_text),
-            "total_tokens_est": estimate_tokens(request.message) + estimate_tokens(response_text),
+            "input_tokens_est": input_tokens_est,
+            "output_tokens_est": output_tokens_est,
+            "total_tokens_est": total_tokens_est,
             "token_count_mode": "estimated_chars_div_4",
-            "estimated_cost": None,
-            "cost_estimate_mode": None,
+            "estimated_cost": cost_info["estimated_cost"],
+            "cost_estimate_mode": cost_info["cost_estimate_mode"],
             "quota_billable": True,
             "billing_billable": False,
             "processing_time": processing_time,
@@ -497,6 +548,10 @@ async def chat(request: ChatRequest):
         error_detail = str(e.detail)
         processing_time = time.time() - start_time
         user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        input_tokens_est = estimate_tokens(request.message)
+        total_tokens_est = input_tokens_est
+        event_model = provider.model if provider else None
+        cost_info = estimate_cost(event_model, total_tokens_est, provider_type)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -507,7 +562,7 @@ async def chat(request: ChatRequest):
             "tenant_id": None,
             "api_key_id": None,
             "provider": provider.name if provider else None,
-            "model": provider.model if provider else None,
+            "model": event_model,
             "provider_type": provider_type,
             "classification_complexity": classification.complexity.value if classification else None,
             "classification_confidence": classification.confidence if classification else None,
@@ -515,12 +570,12 @@ async def chat(request: ChatRequest):
             "needs_context": classification.needs_context if classification else None,
             "input_chars": len(request.message or ""),
             "output_chars": 0,
-            "input_tokens_est": estimate_tokens(request.message),
+            "input_tokens_est": input_tokens_est,
             "output_tokens_est": 0,
-            "total_tokens_est": estimate_tokens(request.message),
+            "total_tokens_est": total_tokens_est,
             "token_count_mode": "estimated_chars_div_4",
-            "estimated_cost": None,
-            "cost_estimate_mode": None,
+            "estimated_cost": cost_info["estimated_cost"],
+            "cost_estimate_mode": cost_info["cost_estimate_mode"],
             "quota_billable": True,
             "billing_billable": False,
             "processing_time": processing_time,
@@ -539,6 +594,10 @@ async def chat(request: ChatRequest):
         error_detail = str(e)
         processing_time = time.time() - start_time
         user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        input_tokens_est = estimate_tokens(request.message)
+        total_tokens_est = input_tokens_est
+        event_model = provider.model if provider else None
+        cost_info = estimate_cost(event_model, total_tokens_est, provider_type)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -549,7 +608,7 @@ async def chat(request: ChatRequest):
             "tenant_id": None,
             "api_key_id": None,
             "provider": provider.name if provider else None,
-            "model": provider.model if provider else None,
+            "model": event_model,
             "provider_type": provider_type,
             "classification_complexity": classification.complexity.value if classification else None,
             "classification_confidence": classification.confidence if classification else None,
@@ -557,12 +616,12 @@ async def chat(request: ChatRequest):
             "needs_context": classification.needs_context if classification else None,
             "input_chars": len(request.message or ""),
             "output_chars": 0,
-            "input_tokens_est": estimate_tokens(request.message),
+            "input_tokens_est": input_tokens_est,
             "output_tokens_est": 0,
-            "total_tokens_est": estimate_tokens(request.message),
+            "total_tokens_est": total_tokens_est,
             "token_count_mode": "estimated_chars_div_4",
-            "estimated_cost": None,
-            "cost_estimate_mode": None,
+            "estimated_cost": cost_info["estimated_cost"],
+            "cost_estimate_mode": cost_info["cost_estimate_mode"],
             "quota_billable": True,
             "billing_billable": False,
             "processing_time": processing_time,
