@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -146,6 +146,8 @@ def estimate_cost(model_name: Optional[str], total_tokens_est: int, provider_typ
 
 def classify_billable_flags(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
     user_id = (user_id or "anonymous").strip().lower()
+    api_key_id = (api_key_id or "").strip().lower()
+    tenant_id = (tenant_id or "").strip().lower()
 
     non_billable_prefixes = (
         "metering_",
@@ -161,6 +163,22 @@ def classify_billable_flags(user_id: Optional[str], api_key_id: Optional[str] = 
         "admin",
         "system",
     }
+
+    if api_key_id:
+        is_non_billable_api_key = any(api_key_id.startswith(prefix) for prefix in ("test_", "internal_", "dev_"))
+        return {
+            "quota_billable": not is_non_billable_api_key,
+            "billing_billable": not is_non_billable_api_key,
+            "billable_mode": "api_key_rule_v2",
+        }
+
+    if tenant_id:
+        is_non_billable_tenant = any(tenant_id.startswith(prefix) for prefix in ("internal_", "dev_", "test_", "staging_"))
+        return {
+            "quota_billable": not is_non_billable_tenant,
+            "billing_billable": not is_non_billable_tenant,
+            "billable_mode": "tenant_rule_v2",
+        }
 
     is_non_billable = user_id in non_billable_exact or any(user_id.startswith(prefix) for prefix in non_billable_prefixes)
 
@@ -219,6 +237,8 @@ class ChatRequest(BaseModel):
     model: str = ""  # Auto-select if empty
     use_memory: bool = True  # Use RAG memory retrieval
     user_id: str = "anonymous"  # User identifier for analytics
+    tenant_id: Optional[str] = None
+    api_key_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
@@ -334,7 +354,11 @@ async def health_detailed():
 
 # AI Chat endpoint with Load Balancing
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    x_ttai_api_key_id: Optional[str] = Header(default=None),
+    x_ttai_tenant_id: Optional[str] = Header(default=None),
+):
     """
     Intelligent chat endpoint with load balancing and query classification
     
@@ -347,6 +371,8 @@ async def chat(request: ChatRequest):
     import time
     start_time = time.time()
     request_id = str(uuid.uuid4())
+    request_api_key_id = request.api_key_id or x_ttai_api_key_id
+    request_tenant_id = request.tenant_id or x_ttai_tenant_id
     fallback_used = False
     final_status = "success"
     final_http_status = 200
@@ -523,7 +549,7 @@ async def chat(request: ChatRequest):
         output_tokens_est = estimate_tokens(response_text)
         total_tokens_est = input_tokens_est + output_tokens_est
         cost_info = estimate_cost(provider.model, total_tokens_est, provider_type)
-        billable_flags = classify_billable_flags(user_id=user_id)
+        billable_flags = classify_billable_flags(user_id=user_id, api_key_id=request_api_key_id, tenant_id=request_tenant_id)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -531,8 +557,8 @@ async def chat(request: ChatRequest):
             "channel": "api_chat",
             "request_path": "/api/chat",
             "user_id": user_id,
-            "tenant_id": None,
-            "api_key_id": None,
+            "tenant_id": request_tenant_id,
+            "api_key_id": request_api_key_id,
             "provider": provider.name,
             "model": provider.model,
             "provider_type": provider_type,
@@ -581,7 +607,7 @@ async def chat(request: ChatRequest):
         total_tokens_est = input_tokens_est
         event_model = provider.model if provider else None
         cost_info = estimate_cost(event_model, total_tokens_est, provider_type)
-        billable_flags = classify_billable_flags(user_id=user_id)
+        billable_flags = classify_billable_flags(user_id=user_id, api_key_id=request_api_key_id, tenant_id=request_tenant_id)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -589,8 +615,8 @@ async def chat(request: ChatRequest):
             "channel": "api_chat",
             "request_path": "/api/chat",
             "user_id": user_id,
-            "tenant_id": None,
-            "api_key_id": None,
+            "tenant_id": request_tenant_id,
+            "api_key_id": request_api_key_id,
             "provider": provider.name if provider else None,
             "model": event_model,
             "provider_type": provider_type,
@@ -629,7 +655,7 @@ async def chat(request: ChatRequest):
         total_tokens_est = input_tokens_est
         event_model = provider.model if provider else None
         cost_info = estimate_cost(event_model, total_tokens_est, provider_type)
-        billable_flags = classify_billable_flags(user_id=user_id)
+        billable_flags = classify_billable_flags(user_id=user_id, api_key_id=request_api_key_id, tenant_id=request_tenant_id)
         usage_event = {
             "event_id": str(uuid.uuid4()),
             "request_id": request_id,
@@ -637,8 +663,8 @@ async def chat(request: ChatRequest):
             "channel": "api_chat",
             "request_path": "/api/chat",
             "user_id": user_id,
-            "tenant_id": None,
-            "api_key_id": None,
+            "tenant_id": request_tenant_id,
+            "api_key_id": request_api_key_id,
             "provider": provider.name if provider else None,
             "model": event_model,
             "provider_type": provider_type,
