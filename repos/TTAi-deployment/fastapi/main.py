@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 import httpx
@@ -408,8 +409,12 @@ app = FastAPI(
 )
 
 # Mount Control Dashboard
-
-
+CONTROL_FRONTEND_PATH = BASE_DIR.parent / "control-frontend"
+if CONTROL_FRONTEND_PATH.exists():
+    app.mount("/control", StaticFiles(directory=str(CONTROL_FRONTEND_PATH), html=True), name="control")
+    logger.info(f"Mounted control frontend at /control from {CONTROL_FRONTEND_PATH}")
+else:
+    logger.warning(f"Control frontend directory not found: {CONTROL_FRONTEND_PATH}")
 
 # CORS
 app.add_middleware(
