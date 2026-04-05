@@ -1616,7 +1616,7 @@ async def admin_errors_summary(
     model_counts = Counter(event.get("model") or "unknown" for event in error_events)
 
     error_signature_counts = Counter(
-        f"{event.get('status') or 'unknown'}|{event.get('http_status') or 'unknown'}|{event.get('provider') or 'unknown'}|{event.get('model') or 'unknown'}|{(event.get('error') or 'unknown')[:120]}"
+        f"{event.get('status') or 'unknown'}|{event.get('http_status') or 'unknown'}|{event.get('provider') or 'unknown'}|{event.get('model') or 'unknown'}|{extract_error_message(event)[:120]}"
         for event in error_events
     )
 
@@ -1816,7 +1816,7 @@ async def control_errors(
     provider_counts = Counter(event.get("provider") or "unknown" for event in error_events)
     model_counts = Counter(event.get("model") or "unknown" for event in error_events)
     error_signature_counts = Counter(
-        f"{event.get('status') or 'unknown'}|{event.get('http_status') or 'unknown'}|{event.get('provider') or 'unknown'}|{event.get('model') or 'unknown'}|{(event.get('error') or 'unknown')[:120]}"
+        f"{event.get('status') or 'unknown'}|{event.get('http_status') or 'unknown'}|{event.get('provider') or 'unknown'}|{event.get('model') or 'unknown'}|{extract_error_message(event)[:120]}"
         for event in error_events
     )
     return {
