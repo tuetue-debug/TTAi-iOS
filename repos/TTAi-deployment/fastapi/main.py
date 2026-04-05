@@ -602,11 +602,33 @@ CONTROL_ACTION_DEFINITIONS = {
 }
 
 
+def is_control_action_allowed(action_name: str) -> bool:
+    destructive_actions = {"clear_learn_queue", "archive_events"}
+    if action_name not in destructive_actions:
+        return True
+
+    env_value = (os.getenv("TTAI_ENABLE_DESTRUCTIVE_CONTROL_ACTIONS") or "").strip().lower()
+    return env_value in {"1", "true", "yes", "on"}
+
+
 def get_available_control_actions() -> Dict[str, List[Dict]]:
     grouped: Dict[str, List[Dict]] = {"providers": [], "models": [], "system": []}
     for action_name, meta in CONTROL_ACTION_DEFINITIONS.items():
-        grouped.setdefault(meta["group"], []).append({"action": action_name, **meta})
+        grouped.setdefault(meta["group"], []).append({
+            "action": action_name,
+            **meta,
+            "enabled": is_control_action_allowed(action_name),
+        })
     return grouped
+
+
+def build_control_response(ok: bool, action: str, message: str, **extra) -> Dict:
+    return {
+        "ok": ok,
+        "action": action,
+        "message": message,
+        **extra,
+    }
 
 @app.get("/control-login", response_class=HTMLResponse)
 async def control_login_page():
@@ -2230,19 +2252,24 @@ async def control_usage(limit: int = Query(default=20, ge=5, le=100), current_us
 
 @app.get("/control-api/session")
 async def control_session_state(current_user = Depends(get_current_control_user)):
-    return {
-        "ok": True,
-        "user": current_user,
-        "cookie_secure": should_use_secure_cookie(),
-        "available_actions": get_available_control_actions(),
-    }
+    return build_control_response(
+        True,
+        "session_state",
+        "Control session active",
+        user=current_user,
+        cookie_secure=should_use_secure_cookie(),
+        available_actions=get_available_control_actions(),
+    )
 
 
 @app.get("/control-api/actions")
 async def control_actions(limit: int = Query(default=25, ge=1, le=200), current_user = Depends(get_current_control_user)):
-    return {
-        "actions": read_control_actions(limit=limit)
-    }
+    return build_control_response(
+        True,
+        "list_actions",
+        "Loaded control action history",
+        actions=read_control_actions(limit=limit),
+    )
 
 
 @app.post("/control-api/actions/run")
@@ -2266,6 +2293,9 @@ async def control_run_action(payload: ControlActionRequest, current_user = Depen
         if not action_meta:
             raise HTTPException(status_code=400, detail=f"Unsupported control action: {action}")
 
+        if not is_control_action_allowed(action):
+            raise HTTPException(status_code=403, detail=f"Action disabled by policy: {action}")
+
         if action_meta.get("requires_target") and not target:
             raise HTTPException(status_code=400, detail=f"target is required for {action}")
 
@@ -2273,41 +2303,45 @@ async def control_run_action(payload: ControlActionRequest, current_user = Depen
             success = load_balancer.enable_provider(target)
             if not success:
                 raise HTTPException(status_code=404, detail=f"Provider {target} not found")
-            result = {"ok": True, "message": f"Provider {target} enabled"}
+            result = build_control_response(True, action, f"Provider {target} enabled")
 
         elif action == "provider_disable":
             success = load_balancer.disable_provider(target)
             if not success:
                 raise HTTPException(status_code=404, detail=f"Provider {target} not found")
-            result = {"ok": True, "message": f"Provider {target} disabled"}
+            result = build_control_response(True, action, f"Provider {target} disabled")
 
         elif action == "model_warmup":
             success = await model_manager.warmup_model(target, payload.timeout)
             if not success:
                 raise HTTPException(status_code=500, detail=f"Failed to warm up model {target}")
-            result = {"ok": True, "message": f"Model {target} warmed up successfully"}
+            result = build_control_response(True, action, f"Model {target} warmed up successfully")
 
         elif action == "model_warmup_all":
             results = await model_manager.warmup_all(payload.timeout)
-            result = {
-                "ok": True,
-                "message": f"Warmed up {sum(1 for success in results.values() if success)}/{len(results)} models",
-                "results": results,
-            }
+            result = build_control_response(
+                True,
+                action,
+                f"Warmed up {sum(1 for success in results.values() if success)}/{len(results)} models",
+                results=results,
+            )
 
         elif action == "health_refresh":
-            result = {
-                "ok": True,
-                "message": "Health snapshot refreshed",
-                "health": await health(),
-                "health_detailed": await health_detailed(),
-            }
+            result = build_control_response(
+                True,
+                action,
+                "Health snapshot refreshed",
+                health=await health(),
+                health_detailed=await health_detailed(),
+            )
 
         elif action == "clear_learn_queue":
-            result = clear_learn_queue_file()
+            file_result = clear_learn_queue_file()
+            result = build_control_response(True, action, file_result.get("message", "Learn queue cleared"), **file_result)
 
         elif action == "archive_events":
-            result = archive_usage_events_file()
+            file_result = archive_usage_events_file()
+            result = build_control_response(True, action, file_result.get("message", "Usage events archived"), **file_result)
 
         action_record["status"] = "success"
         action_record["result"] = result.get("message") or "ok"
