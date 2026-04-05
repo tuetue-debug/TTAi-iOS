@@ -223,6 +223,15 @@ function formatCost(value) {
     return `$${num.toFixed(2)}`;
 }
 
+function formatErrorSignature(value) {
+    if (!value) return '--';
+    const parts = String(value).split('|');
+    if (parts.length < 5) return value;
+    const [status, httpStatus, provider, model, ...messageParts] = parts;
+    const message = messageParts.join('|');
+    return `${status} · ${httpStatus} · ${provider} · ${formatShortLabel(model, 28)} · ${formatShortLabel(message, 72)}`;
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -805,7 +814,7 @@ function renderErrors() {
                     <tbody>
                         ${topErrorSignatures.slice(0, 10).map(sig => `
                             <tr>
-                                <td>${sig.signature || '--'}</td>
+                                <td><span class="signature-text">${formatErrorSignature(sig.signature)}</span></td>
                                 <td>${sig.count || 0}</td>
                                 <td>${sig.last_seen || '--'}</td>
                             </tr>

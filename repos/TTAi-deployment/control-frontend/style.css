@@ -277,9 +277,10 @@ body {
 }
 
 .kpi-value {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 800;
-    line-height: 1;
+    line-height: 1.1;
+    word-break: break-word;
 }
 
 .kpi-value.good {
@@ -354,6 +355,7 @@ body {
 .panel-row {
     display: flex;
     justify-content: space-between;
+    gap: 16px;
     padding: 10px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -364,10 +366,14 @@ body {
 
 .panel-label {
     color: var(--text-secondary);
+    flex: 1;
+    word-break: break-word;
 }
 
 .panel-value {
     font-weight: 600;
+    text-align: right;
+    word-break: break-word;
 }
 
 /* Tables */
@@ -404,6 +410,8 @@ body {
     padding: 12px 20px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     font-size: 14px;
+    vertical-align: top;
+    word-break: break-word;
 }
 
 .table tr:last-child td {
@@ -475,6 +483,13 @@ body {
     .sidebar {
         width: 200px;
     }
+}
+
+.signature-text {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
 }
 
 @media (max-width: 768px) {
