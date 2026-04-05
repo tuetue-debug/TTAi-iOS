@@ -25,12 +25,61 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_EVENTS_PATH = BASE_DIR / "data" / "usage_events.jsonl"
+BILLING_CONFIG_PATH = BASE_DIR / "data" / "billing_config.json"
 USAGE_EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 def estimate_tokens(text: str) -> int:
     if not text:
         return 0
     return max(1, len(text) // 4)
+
+def load_billing_config() -> Dict:
+    if not BILLING_CONFIG_PATH.exists():
+        return {
+            "version": "0.0.0",
+            "api_keys": {},
+            "tenants": {},
+            "user_rules": {
+                "non_billable_prefixes": [
+                    "metering_",
+                    "smoke_",
+                    "cost_estimation_",
+                    "test_",
+                    "debug_",
+                    "internal_"
+                ],
+                "non_billable_exact": [
+                    "anonymous",
+                    "admin",
+                    "system"
+                ]
+            }
+        }
+    try:
+        with open(BILLING_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.warning(f"Failed to load billing config: {e}, using defaults")
+        return {
+            "version": "0.0.0",
+            "api_keys": {},
+            "tenants": {},
+            "user_rules": {
+                "non_billable_prefixes": [
+                    "metering_",
+                    "smoke_",
+                    "cost_estimation_",
+                    "test_",
+                    "debug_",
+                    "internal_"
+                ],
+                "non_billable_exact": [
+                    "anonymous",
+                    "admin",
+                    "system"
+                ]
+            }
+        }
 
 def write_usage_event(event: Dict):
     with open(USAGE_EVENTS_PATH, "a", encoding="utf-8") as f:
@@ -163,40 +212,52 @@ def classify_billable_flags(user_id: Optional[str], api_key_id: Optional[str] = 
     user_id = (user_id or "anonymous").strip().lower()
     api_key_id = (api_key_id or "").strip().lower()
     tenant_id = (tenant_id or "").strip().lower()
-
-    non_billable_prefixes = (
-        "metering_",
-        "smoke_",
-        "cost_estimation_",
-        "test_",
-        "debug_",
-        "internal_",
-    )
-
-    non_billable_exact = {
-        "anonymous",
-        "admin",
-        "system",
-    }
-
+    
+    config = load_billing_config()
+    
+    # 1. API key rule (highest priority)
     if api_key_id:
+        api_key_info = config.get("api_keys", {}).get(api_key_id)
+        if api_key_info is not None:
+            billable = api_key_info.get("billable", True)
+            return {
+                "quota_billable": billable,
+                "billing_billable": billable,
+                "billable_mode": "api_key_config_v3",
+            }
+        # Fallback to prefix rule if not in config
         is_non_billable_api_key = any(api_key_id.startswith(prefix) for prefix in ("test_", "internal_", "dev_"))
         return {
             "quota_billable": not is_non_billable_api_key,
             "billing_billable": not is_non_billable_api_key,
             "billable_mode": "api_key_rule_v2",
         }
-
+    
+    # 2. Tenant rule
     if tenant_id:
+        tenant_info = config.get("tenants", {}).get(tenant_id)
+        if tenant_info is not None:
+            billable = tenant_info.get("billable", True)
+            return {
+                "quota_billable": billable,
+                "billing_billable": billable,
+                "billable_mode": "tenant_config_v3",
+            }
+        # Fallback to prefix rule if not in config
         is_non_billable_tenant = any(tenant_id.startswith(prefix) for prefix in ("internal_", "dev_", "test_", "staging_"))
         return {
             "quota_billable": not is_non_billable_tenant,
             "billing_billable": not is_non_billable_tenant,
             "billable_mode": "tenant_rule_v2",
         }
-
+    
+    # 3. User ID rule
+    user_rules = config.get("user_rules", {})
+    non_billable_prefixes = tuple(user_rules.get("non_billable_prefixes", []))
+    non_billable_exact = set(user_rules.get("non_billable_exact", []))
+    
     is_non_billable = user_id in non_billable_exact or any(user_id.startswith(prefix) for prefix in non_billable_prefixes)
-
+    
     return {
         "quota_billable": not is_non_billable,
         "billing_billable": not is_non_billable,
@@ -1179,6 +1240,53 @@ async def admin_billing_summary(
         },
         "summary": summarize_billing_usage(filtered),
     }
+
+# Billing config management endpoints
+@app.get("/api/admin/billing/config")
+async def get_billing_config():
+    """Get current billing configuration"""
+    config = load_billing_config()
+    return {
+        "config": config,
+        "path": str(BILLING_CONFIG_PATH),
+        "exists": BILLING_CONFIG_PATH.exists(),
+    }
+
+@app.put("/api/admin/billing/config")
+async def update_billing_config(new_config: Dict):
+    """Update billing configuration (full replace)"""
+    try:
+        # Validate required structure
+        if not isinstance(new_config, dict):
+            raise HTTPException(status_code=400, detail="Config must be a JSON object")
+        
+        # Ensure required sections
+        if "api_keys" not in new_config:
+            new_config["api_keys"] = {}
+        if "tenants" not in new_config:
+            new_config["tenants"] = {}
+        if "user_rules" not in new_config:
+            new_config["user_rules"] = {
+                "non_billable_prefixes": [],
+                "non_billable_exact": []
+            }
+        
+        # Add/update metadata
+        new_config["version"] = new_config.get("version", "1.0.0")
+        new_config["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        
+        # Write to file
+        with open(BILLING_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(new_config, f, indent=2, ensure_ascii=False)
+        
+        return {
+            "status": "updated",
+            "path": str(BILLING_CONFIG_PATH),
+            "config": new_config,
+        }
+    except Exception as e:
+        logger.error(f"Failed to update billing config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update config: {str(e)}")
 
 def summarize_billing_usage(events: List[Dict]) -> Dict:
     if not events:
