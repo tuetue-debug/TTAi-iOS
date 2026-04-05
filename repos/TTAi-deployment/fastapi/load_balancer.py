@@ -58,6 +58,25 @@ class LoadBalancer:
         self.health_status = {}
         self.request_count = {}
         self._initialize_metrics()
+
+    def _normalize_provider_lookup(self, provider_name: str) -> str:
+        return (provider_name or "").strip().lower()
+
+    def _find_provider(self, provider_name: str):
+        lookup = self._normalize_provider_lookup(provider_name)
+        if not lookup:
+            return None
+
+        for provider_list in self.providers.values():
+            for provider in provider_list:
+                aliases = {
+                    self._normalize_provider_lookup(provider.name),
+                    self._normalize_provider_lookup(provider.model),
+                    self._normalize_provider_lookup(f"{provider.provider_type.value}:{provider.model}"),
+                }
+                if lookup in aliases:
+                    return provider
+        return None
         
     def _initialize_providers(self) -> Dict[ProviderType, List[ProviderConfig]]:
         """Initialize all AI providers with 60/30/10 distribution"""
@@ -323,23 +342,21 @@ class LoadBalancer:
     
     def disable_provider(self, provider_name: str):
         """Disable a provider (e.g., due to repeated failures)"""
-        for provider_list in self.providers.values():
-            for provider in provider_list:
-                if provider.name == provider_name:
-                    provider.enabled = False
-                    logger.warning(f"Disabled provider: {provider_name}")
-                    return True
-        return False
+        provider = self._find_provider(provider_name)
+        if provider is None:
+            return False
+        provider.enabled = False
+        logger.warning(f"Disabled provider: {provider.name}")
+        return True
     
     def enable_provider(self, provider_name: str):
         """Enable a previously disabled provider"""
-        for provider_list in self.providers.values():
-            for provider in provider_list:
-                if provider.name == provider_name:
-                    provider.enabled = True
-                    logger.info(f"Enabled provider: {provider_name}")
-                    return True
-        return False
+        provider = self._find_provider(provider_name)
+        if provider is None:
+            return False
+        provider.enabled = True
+        logger.info(f"Enabled provider: {provider.name}")
+        return True
 
 
 # Singleton instance
