@@ -365,6 +365,34 @@ body {
     padding: 20px;
 }
 
+.operator-panel {
+    border-color: rgba(59, 130, 246, 0.28);
+}
+
+.operator-panel-warning {
+    border-color: rgba(245, 158, 11, 0.34);
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12) inset;
+}
+
+.operator-guidance-copy {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 12px;
+}
+
+.operator-guidance-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 14px 0 10px;
+}
+
+.operator-guidance-meta {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 .panel-header {
     display: flex;
     align-items: center;

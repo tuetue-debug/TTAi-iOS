@@ -238,6 +238,24 @@ function refreshCurrentPage() {
     loadPage(currentPage);
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 async function runControlAction(action, target = null, timeout = 30) {
     return fetchAPI('/control-api/actions/run', {
         method: 'POST',
@@ -443,6 +461,22 @@ function renderOverview() {
         </div>
         
         <div class="panel-grid">
+            <div class="panel operator-panel ${(summary.alert_count || 0) > 0 || (workloads.learn_queue?.length ?? 0) > 0 ? 'operator-panel-warning' : ''}">
+                <div class="panel-header">
+                    <div class="panel-title">Recommended Actions</div>
+                    <div class="panel-subtitle">Context-aware operator flow</div>
+                </div>
+                <div class="panel-content">
+                    <div class="operator-guidance-copy">${(workloads.learn_queue?.length ?? 0) > 0 ? `Learn queue has ${workloads.learn_queue?.length ?? 0} pending items. Consider clearing only if the queue is stale or broken.` : 'Learn queue is under control.'}</div>
+                    <div class="operator-guidance-copy">${(summary.alert_count || 0) > 0 ? `${summary.alert_count || 0} alert(s) are open. Refresh health first, then review Models if provider instability is suspected.` : 'No immediate alert pressure detected.'}</div>
+                    <div class="operator-guidance-actions">
+                        <button class="btn-action" data-action="health-refresh-inline">Refresh Health</button>
+                        <button class="btn-action btn-action-warning" data-nav="models">Open Models</button>
+                        <button class="btn-action" data-nav="errors">Open Errors</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Billing Summary</div>
@@ -1253,6 +1287,25 @@ function renderSystem() {
             }
         });
     });
+
+    pageEl.querySelectorAll('[data-action="health-refresh-inline"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('health_refresh');
+                showToast(result.message || 'Health refreshed', 'success');
+                await loadSystem();
+            } catch (error) {
+                showToast(`Health refresh failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.addEventListener('click', () => switchPage(btn.dataset.nav));
+    });
 }
 
 // Toast and confirm utilities
@@ -1545,11 +1598,14 @@ function renderErrors() {
     const statusBreakdown = data.status_breakdown || {};
     const httpStatusBreakdown = data.http_status_breakdown || {};
     const providerBreakdown = data.provider_breakdown || {};
-    const modelBreakdown = data.model_breakdown || {};
     const topErrorSignatures = data.top_error_signatures || [];
-    const recentErrors = data.recent_errors || [];
+    const topProviderError = Object.keys(providerBreakdown)[0] || null;
+    const topHttpError = Object.keys(httpStatusBreakdown)[0] || null;
+    const needsAttention = errorCount > 0 || topErrorSignatures.length > 0;
     
     pageEl.innerHTML = `
+        <div class="toast-container" id="toast-container"></div>
+
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Errors</div>
@@ -1593,6 +1649,22 @@ function renderErrors() {
         </div>
         
         <div class="panel-grid">
+            <div class="panel operator-panel ${needsAttention ? 'operator-panel-warning' : ''}">
+                <div class="panel-header">
+                    <div class="panel-title">Operator Guidance</div>
+                    <div class="panel-subtitle">Recommended next step</div>
+                </div>
+                <div class="panel-content">
+                    <div class="operator-guidance-copy">${needsAttention ? `Errors are active${topProviderError ? ` and ${escapeHtml(topProviderError)} is currently leading` : ''}. Refresh health first, then inspect Models or System before making routing changes.` : 'No immediate error spike detected. Keep monitoring and refresh snapshots when needed.'}</div>
+                    <div class="operator-guidance-actions">
+                        <button class="btn-action" data-action="errors-refresh-health">Refresh Health</button>
+                        <button class="btn-action" data-nav="models">Open Models</button>
+                        <button class="btn-action" data-nav="system">Open System</button>
+                    </div>
+                    <div class="operator-guidance-meta">${topHttpError ? `Top HTTP status: ${escapeHtml(topHttpError)}` : 'No dominant HTTP error code'}${topProviderError ? ` · Top provider: ${escapeHtml(topProviderError)}` : ''}</div>
+                </div>
+            </div>
+
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Status Breakdown</div>
@@ -1681,4 +1753,23 @@ function renderErrors() {
             </div>
         ` : ''}
     `;
+
+    pageEl.querySelectorAll('[data-action="errors-refresh-health"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            try {
+                const result = await runControlAction('health_refresh');
+                showToast(result.message || 'Health refreshed', 'success');
+                await loadErrors();
+            } catch (error) {
+                showToast(`Health refresh failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.addEventListener('click', () => switchPage(btn.dataset.nav));
+    });
 }
