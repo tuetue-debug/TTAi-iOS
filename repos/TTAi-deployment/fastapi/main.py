@@ -2099,11 +2099,13 @@ async def control_models(current_user = Depends(get_current_control_user)):
     lb_metrics = await get_loadbalancer_metrics()
     ollama = await ollama_health()
     ollama_models_resp = await get_ollama_models()
+    collector_model_status = await collector_service.models()
 
     models_list = list(models_status.values()) if isinstance(models_status, dict) else []
     provider_list = lb_providers.get("providers", []) if isinstance(lb_providers, dict) else []
     ollama_models = ollama_models_resp.get("models", []) if isinstance(ollama_models_resp, dict) else []
     lb_metrics_dict = lb_metrics.model_dump() if hasattr(lb_metrics, "model_dump") else (lb_metrics if isinstance(lb_metrics, dict) else {})
+    model_hosts = ((collector_model_status or {}).get("model_status") or {}).get("hosts", [])
 
     health_status_map = (lb_metrics_dict.get("health_status", {}) or {})
     provider_list = [
@@ -2132,8 +2134,10 @@ async def control_models(current_user = Depends(get_current_control_user)):
             "disabled_provider_count": max(len(provider_list) - enabled_count, 0),
             "ollama_status": ollama.get("status", "unknown"),
             "ollama_model_count": len(ollama_models),
+            "host_group_count": len(model_hosts),
         },
         "models": models_list,
+        "model_hosts": model_hosts,
         "providers": provider_list,
         "load_balancer_metrics": lb_metrics_dict,
         "ollama": {
