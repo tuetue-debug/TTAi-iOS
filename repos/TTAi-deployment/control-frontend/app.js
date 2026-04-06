@@ -461,22 +461,6 @@ function renderOverview() {
         </div>
         
         <div class="panel-grid">
-            <div class="panel operator-panel ${(summary.alert_count || 0) > 0 || (workloads.learn_queue?.length ?? 0) > 0 ? 'operator-panel-warning' : ''}">
-                <div class="panel-header">
-                    <div class="panel-title">Recommended Actions</div>
-                    <div class="panel-subtitle">Context-aware operator flow</div>
-                </div>
-                <div class="panel-content">
-                    <div class="operator-guidance-copy">${(workloads.learn_queue?.length ?? 0) > 0 ? `Learn queue has ${workloads.learn_queue?.length ?? 0} pending items. Consider clearing only if the queue is stale or broken.` : 'Learn queue is under control.'}</div>
-                    <div class="operator-guidance-copy">${(summary.alert_count || 0) > 0 ? `${summary.alert_count || 0} alert(s) are open. Refresh health first, then review Models if provider instability is suspected.` : 'No immediate alert pressure detected.'}</div>
-                    <div class="operator-guidance-actions">
-                        <button class="btn-action" data-action="health-refresh-inline">Refresh Health</button>
-                        <button class="btn-action btn-action-warning" data-nav="models">Open Models</button>
-                        <button class="btn-action" data-nav="errors">Open Errors</button>
-                    </div>
-                </div>
-            </div>
-
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Billing Summary</div>
