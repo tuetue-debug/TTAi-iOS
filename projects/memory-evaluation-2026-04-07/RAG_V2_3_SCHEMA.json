@@ -1,0 +1,34 @@
+{
+  "memory_candidate": {
+    "id": "string",
+    "timestamp": "iso-datetime",
+    "source_context": "string",
+    "candidate_type": "decision|preference|blocker|next_step|project_state|relationship_fact",
+    "subject": "string",
+    "summary": "string",
+    "detail": "string",
+    "importance": "low|medium|high|critical",
+    "freshness": "low|medium|high",
+    "stability": "volatile|tentative|stable",
+    "user_specificity": "low|medium|high",
+    "operational_criticality": "low|medium|high",
+    "sources": [
+      {
+        "path": "string",
+        "line": 0,
+        "snippet": "string"
+      }
+    ],
+    "promotion": {
+      "decision": "daily_only|promote_long_term|structured_store|eval_candidate|training_candidate|reject",
+      "reason": "string"
+    },
+    "provenance": {
+      "extraction_method": "manual|summary-driven|model-assisted|rule-based",
+      "verification_status": "unverified|verified_markdown|verified_multi_source",
+      "retrieval_path": ["string"],
+      "risk_score": 0.0,
+      "version": "RAG-V2.3"
+    }
+  }
+}
