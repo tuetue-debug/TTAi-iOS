@@ -21,6 +21,7 @@ from query_classifier import query_classifier, ClassificationResult
 from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
 from auth import get_current_admin_user, get_current_control_user, validate_admin_token, CONTROL_SESSION_COOKIE, should_use_secure_cookie
+from user_routes import router as user_auth_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -436,6 +437,9 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+# Include user authentication routes
+app.include_router(user_auth_router)
 
 # Mount Control Dashboard
 CONTROL_FRONTEND_PATH = BASE_DIR.parent / "control-frontend"
@@ -2169,6 +2173,59 @@ async def control_system(current_user = Depends(get_current_control_user)):
         "health": health_summary,
         "workloads": workloads,
         "alerts": alerts,
+    }
+
+@app.get("/control-api/topology")
+async def control_topology(current_user = Depends(get_current_control_user)):
+    inventory = {
+        "nodes": [
+            {"id": "node-vhp", "name": "vannt-home-pc", "role": "development", "status": "operational"},
+            {"id": "node-vwo", "name": "vannt-work-op", "role": "compute", "status": "operational"},
+            {"id": "node-dell", "name": "Dell Zx0Q", "role": "production", "status": "operational"},
+        ],
+        "services": [
+            {"id": "svc-fastapi-8000", "name": "FastAPI Original", "type": "api", "node_id": "node-vhp", "status": "offline"},
+            {"id": "svc-hybrid-8005", "name": "TTAi Hybrid v2.0", "type": "api", "node_id": "node-vhp", "status": "operational"},
+            {"id": "svc-debug-8013", "name": "TTAi Debug", "type": "api", "node_id": "node-vhp", "status": "operational"},
+            {"id": "svc-lb-8015", "name": "Load Balancer", "type": "load_balancer", "node_id": "node-vhp", "status": "operational"},
+            {"id": "svc-rag-8075", "name": "RAG Service", "type": "memory", "node_id": "node-vhp", "status": "unknown"},
+            {"id": "svc-dashboard-8090", "name": "Control Dashboard", "type": "dashboard", "node_id": "node-vhp", "status": "unknown"},
+            {"id": "svc-cliproxy-8317", "name": "CLI Proxy", "type": "cli_proxy", "node_id": "node-vhp", "status": "operational"},
+            {"id": "svc-ollama-public", "name": "Ollama Public", "type": "ai_inference", "node_id": "node-vhp", "status": "operational"},
+            {"id": "svc-ollama-memory", "name": "Ollama Memory", "type": "ai_inference", "node_id": "node-vhp", "status": "operational"},
+            {"id": "svc-wordpress", "name": "WordPress", "type": "cms", "node_id": "node-dell", "status": "offline"},
+            {"id": "svc-fastapi-prod", "name": "FastAPI Prod", "type": "api", "node_id": "node-dell", "status": "offline"},
+            {"id": "svc-postgres", "name": "PostgreSQL", "type": "database", "node_id": "node-dell", "status": "operational"},
+            {"id": "svc-mysql", "name": "MySQL", "type": "database", "node_id": "node-dell", "status": "operational"},
+            {"id": "svc-redis", "name": "Redis", "type": "cache", "node_id": "node-dell", "status": "operational"},
+            {"id": "svc-ollama-remote", "name": "Ollama Remote", "type": "ai_inference", "node_id": "node-vwo", "status": "operational"},
+            {"id": "svc-fastapi-remote", "name": "TTAi Remote API", "type": "api", "node_id": "node-vwo", "status": "operational"}
+        ],
+        "dependencies": [
+            {"source_service_id": "svc-lb-8015", "target_service_id": "svc-debug-8013", "type": "api_call", "critical": True},
+            {"source_service_id": "svc-lb-8015", "target_service_id": "svc-fastapi-remote", "type": "api_call", "critical": False},
+            {"source_service_id": "svc-hybrid-8005", "target_service_id": "svc-cliproxy-8317", "type": "api_call", "critical": True},
+            {"source_service_id": "svc-hybrid-8005", "target_service_id": "svc-ollama-public", "type": "api_call", "critical": True},
+            {"source_service_id": "svc-rag-8075", "target_service_id": "svc-ollama-memory", "type": "api_call", "critical": True},
+            {"source_service_id": "svc-wordpress", "target_service_id": "svc-mysql", "type": "database", "critical": True},
+            {"source_service_id": "svc-fastapi-prod", "target_service_id": "svc-postgres", "type": "database", "critical": True}
+        ]
+    }
+    nodes = inventory["nodes"]
+    services = inventory["services"]
+    dependencies = inventory["dependencies"]
+    return {
+        "version": "topology-mvp-v1",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "summary": {
+            "node_count": len(nodes),
+            "operational_node_count": sum(1 for n in nodes if n.get("status") == "operational"),
+            "service_count": len(services),
+            "operational_service_count": sum(1 for s in services if s.get("status") == "operational"),
+            "dependency_count": len(dependencies),
+            "critical_dependency_count": sum(1 for d in dependencies if d.get("critical")),
+        },
+        "inventory": inventory,
     }
 
 @app.get("/control-api/usage")

@@ -12,6 +12,7 @@ let errorsData = null;
 let modelsData = null;
 let systemData = null;
 let usageData = null;
+let topologyData = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
@@ -35,7 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'about'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'topology', 'about'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -102,6 +103,7 @@ function setActivePage(page) {
         models: 'Models',
         system: 'System',
         usage: 'Usage',
+        topology: 'Topology',
         about: 'About'
     };
     pageTitle.textContent = pageTitles[page] || 'Dashboard';
@@ -207,6 +209,9 @@ async function loadPage(page) {
             case 'usage':
                 await loadUsage();
                 break;
+            case 'topology':
+                await loadTopology();
+                break;
             case 'about':
                 renderAbout();
                 break;
@@ -236,6 +241,131 @@ async function loadPage(page) {
 
 function refreshCurrentPage() {
     loadPage(currentPage);
+}
+
+async function loadTopology() {
+    topologyData = await fetchAPI('/control-api/topology');
+    renderTopology();
+}
+
+function renderTopology() {
+    const pageEl = document.getElementById('page-topology');
+    const summary = topologyData.summary || {};
+    const inventory = topologyData.inventory || {};
+    const nodes = inventory.nodes || [];
+    const services = inventory.services || [];
+    const dependencies = inventory.dependencies || [];
+
+    pageEl.innerHTML = `
+        <div class="page-grid topology-grid">
+            <div class="card span-12">
+                <div class="card-header">
+                    <h2 class="card-title">System Topology</h2>
+                    <p class="card-subtitle">Operational map of nodes, services, and dependencies</p>
+                </div>
+                <div class="kpi-grid four-up">
+                    <div class="kpi-card">
+                        <div class="kpi-eyebrow">Nodes</div>
+                        <div class="kpi-value">${summary.node_count || 0}</div>
+                        <div class="kpi-subtitle">${summary.operational_node_count || 0} operational</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-eyebrow">Services</div>
+                        <div class="kpi-value">${summary.service_count || 0}</div>
+                        <div class="kpi-subtitle">${summary.operational_service_count || 0} operational</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-eyebrow">Dependencies</div>
+                        <div class="kpi-value">${summary.dependency_count || 0}</div>
+                        <div class="kpi-subtitle">${summary.critical_dependency_count || 0} critical</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-eyebrow">Inventory</div>
+                        <div class="kpi-value">${escapeHtml(topologyData.version || 'v1')}</div>
+                        <div class="kpi-subtitle">${escapeHtml(topologyData.timestamp || '--')}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card span-5">
+                <div class="card-header">
+                    <h3 class="card-title">Nodes</h3>
+                </div>
+                <div class="stack-list compact">
+                    ${nodes.map(node => `
+                        <div class="stack-item">
+                            <div>
+                                <div class="stack-title">${escapeHtml(node.name)}</div>
+                                <div class="stack-subtitle">${escapeHtml(node.role || 'unknown')}</div>
+                            </div>
+                            <span class="status-pill ${statusTone(node.status)}">${escapeHtml(node.status || 'unknown')}</span>
+                        </div>
+                    `).join('') || '<div class="empty-state-inline">No nodes</div>'}
+                </div>
+            </div>
+
+            <div class="card span-7">
+                <div class="card-header">
+                    <h3 class="card-title">Services</h3>
+                    <p class="card-subtitle">Grouped by node</p>
+                </div>
+                <div class="topology-service-groups">
+                    ${nodes.map(node => {
+                        const nodeServices = services.filter(service => service.node_id === node.id);
+                        return `
+                            <div class="topology-node-group">
+                                <div class="topology-node-header">${escapeHtml(node.name)}</div>
+                                <div class="topology-service-list">
+                                    ${nodeServices.map(service => `
+                                        <div class="topology-service-item">
+                                            <div>
+                                                <div class="stack-title">${escapeHtml(service.name)}</div>
+                                                <div class="stack-subtitle">${escapeHtml(service.type || 'service')}</div>
+                                            </div>
+                                            <span class="status-pill ${statusTone(service.status)}">${escapeHtml(service.status || 'unknown')}</span>
+                                        </div>
+                                    `).join('') || '<div class="empty-state-inline">No services</div>'}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="card span-12">
+                <div class="card-header">
+                    <h3 class="card-title">Dependency Map</h3>
+                    <p class="card-subtitle">Critical paths first</p>
+                </div>
+                <div class="table-shell">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Target</th>
+                                <th>Type</th>
+                                <th>Critical</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${dependencies.map(dep => {
+                                const source = services.find(s => s.id === dep.source_service_id)?.name || dep.source_service_id;
+                                const target = services.find(s => s.id === dep.target_service_id)?.name || dep.target_service_id;
+                                return `
+                                    <tr>
+                                        <td>${escapeHtml(source)}</td>
+                                        <td>${escapeHtml(target)}</td>
+                                        <td>${escapeHtml(dep.type || 'unknown')}</td>
+                                        <td>${dep.critical ? '<span class="status-pill status-error">critical</span>' : '<span class="status-pill status-ok">normal</span>'}</td>
+                                    </tr>
+                                `;
+                            }).join('') || '<tr><td colspan="4" class="empty-cell">No dependencies</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function escapeHtml(value) {

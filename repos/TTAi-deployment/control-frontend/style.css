@@ -1,5 +1,41 @@
 /* TTAi Control Dashboard - Dark Operator Theme */
 
+.topology-grid .topology-service-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.topology-node-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.topology-node-header {
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.topology-service-list {
+    display: grid;
+    gap: 10px;
+}
+
+.topology-service-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+
 :root {
     --bg-dark: #0f172a;
     --bg-card: #1e293b;
