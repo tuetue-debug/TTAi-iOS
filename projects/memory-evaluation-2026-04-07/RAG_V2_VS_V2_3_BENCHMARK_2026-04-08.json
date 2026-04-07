@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-04-08T00:41:18.149521",
+  "results": [
+    {
+      "query": "What decision was made about port 8000?",
+      "v2": {
+        "evidence_count": 3,
+        "decision": "accept",
+        "confidence": "high"
+      },
+      "v2_3": {
+        "evidence_count": 0,
+        "decision": "fallback",
+        "confidence": "low"
+      },
+      "delta": "same_or_lower"
+    },
+    {
+      "query": "What role should Gemma play in the memory system?",
+      "v2": {
+        "evidence_count": 5,
+        "decision": "accept",
+        "confidence": "high"
+      },
+      "v2_3": {
+        "evidence_count": 0,
+        "decision": "fallback",
+        "confidence": "low"
+      },
+      "delta": "same_or_lower"
+    },
+    {
+      "query": "What was upgraded into RAG-V2.3?",
+      "v2": {
+        "evidence_count": 2,
+        "decision": "accept",
+        "confidence": "high"
+      },
+      "v2_3": {
+        "evidence_count": 1,
+        "decision": "review",
+        "confidence": "medium"
+      },
+      "delta": "same_or_lower"
+    }
+  ]
+}
