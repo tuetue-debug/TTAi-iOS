@@ -1,0 +1,41 @@
+{
+  "description": "Schema for structured RAG-V1 vs RAG-V2 evaluation records",
+  "fields": {
+    "query_id": "string",
+    "timestamp": "iso-datetime",
+    "source_context": "string",
+    "query_text": "string",
+    "query_class": "string",
+    "authoritative_sources": ["string"],
+    "freshness_requirement": "low|medium|high",
+    "rag_v1": {
+      "retrieval_summary": "string",
+      "answer": "string",
+      "confidence_impression": "string",
+      "weaknesses": ["string"]
+    },
+    "rag_v2": {
+      "retrieval_summary": "string",
+      "verification": "string",
+      "evidence_bundle_summary": "string",
+      "scoring_summary": "string",
+      "decision": "accept|review|fallback",
+      "answer": "string",
+      "weaknesses": ["string"]
+    },
+    "comparison": {
+      "better_answer": "V1|V2|mixed|neither",
+      "why": "string",
+      "hallucination_risk": "string",
+      "freshness_handling": "string",
+      "groundedness": "string"
+    },
+    "labels": {
+      "preferred_output": "string",
+      "failure_tags": ["string"],
+      "keep_for_benchmark": true,
+      "keep_for_training": true,
+      "notes": "string"
+    }
+  }
+}
