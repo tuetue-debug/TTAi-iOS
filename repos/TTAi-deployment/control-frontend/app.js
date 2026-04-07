@@ -298,7 +298,7 @@ function renderTopology() {
                                 <div class="stack-title">${escapeHtml(node.name)}</div>
                                 <div class="stack-subtitle">${escapeHtml(node.role || 'unknown')}</div>
                             </div>
-                            <span class="status-pill ${statusTone(node.status)}">${escapeHtml(node.status || 'unknown')}</span>
+                            <span class="status-pill ${getStatusTone(node.status)}">${escapeHtml(node.status || 'unknown')}</span>
                         </div>
                     `).join('') || '<div class="empty-state-inline">No nodes</div>'}
                 </div>
@@ -322,7 +322,7 @@ function renderTopology() {
                                                 <div class="stack-title">${escapeHtml(service.name)}</div>
                                                 <div class="stack-subtitle">${escapeHtml(service.type || 'service')}</div>
                                             </div>
-                                            <span class="status-pill ${statusTone(service.status)}">${escapeHtml(service.status || 'unknown')}</span>
+                                            <span class="status-pill ${getStatusTone(service.status)}">${escapeHtml(service.status || 'unknown')}</span>
                                         </div>
                                     `).join('') || '<div class="empty-state-inline">No services</div>'}
                                 </div>
