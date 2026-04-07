@@ -1,0 +1,182 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-04-08T01:10:00+07:00",
+  "nodes": [
+    {
+      "id": "node-vhp",
+      "name": "vannt-home-pc",
+      "role": "development",
+      "status": "operational"
+    },
+    {
+      "id": "node-vwo",
+      "name": "vannt-work-op",
+      "role": "compute",
+      "status": "operational"
+    },
+    {
+      "id": "node-dell",
+      "name": "Dell Zx0Q",
+      "role": "production",
+      "status": "operational"
+    }
+  ],
+  "services": [
+    {
+      "id": "svc-fastapi-8000",
+      "name": "FastAPI Original",
+      "type": "api",
+      "node_id": "node-vhp",
+      "status": "offline"
+    },
+    {
+      "id": "svc-hybrid-8005",
+      "name": "TTAi Hybrid v2.0",
+      "type": "api",
+      "node_id": "node-vhp",
+      "status": "operational"
+    },
+    {
+      "id": "svc-debug-8013",
+      "name": "TTAi Debug",
+      "type": "api",
+      "node_id": "node-vhp",
+      "status": "operational"
+    },
+    {
+      "id": "svc-lb-8015",
+      "name": "Load Balancer",
+      "type": "load_balancer",
+      "node_id": "node-vhp",
+      "status": "operational"
+    },
+    {
+      "id": "svc-rag-8075",
+      "name": "RAG Service",
+      "type": "memory",
+      "node_id": "node-vhp",
+      "status": "unknown"
+    },
+    {
+      "id": "svc-dashboard-8090",
+      "name": "Control Dashboard",
+      "type": "dashboard",
+      "node_id": "node-vhp",
+      "status": "unknown"
+    },
+    {
+      "id": "svc-cliproxy-8317",
+      "name": "CLI Proxy",
+      "type": "cli_proxy",
+      "node_id": "node-vhp",
+      "status": "operational"
+    },
+    {
+      "id": "svc-ollama-public",
+      "name": "Ollama Public",
+      "type": "ai_inference",
+      "node_id": "node-vhp",
+      "status": "operational"
+    },
+    {
+      "id": "svc-ollama-memory",
+      "name": "Ollama Memory",
+      "type": "ai_inference",
+      "node_id": "node-vhp",
+      "status": "operational"
+    },
+    {
+      "id": "svc-wordpress",
+      "name": "WordPress",
+      "type": "cms",
+      "node_id": "node-dell",
+      "status": "offline"
+    },
+    {
+      "id": "svc-fastapi-prod",
+      "name": "FastAPI Prod",
+      "type": "api",
+      "node_id": "node-dell",
+      "status": "offline"
+    },
+    {
+      "id": "svc-postgres",
+      "name": "PostgreSQL",
+      "type": "database",
+      "node_id": "node-dell",
+      "status": "operational"
+    },
+    {
+      "id": "svc-mysql",
+      "name": "MySQL",
+      "type": "database",
+      "node_id": "node-dell",
+      "status": "operational"
+    },
+    {
+      "id": "svc-redis",
+      "name": "Redis",
+      "type": "cache",
+      "node_id": "node-dell",
+      "status": "operational"
+    },
+    {
+      "id": "svc-ollama-remote",
+      "name": "Ollama Remote",
+      "type": "ai_inference",
+      "node_id": "node-vwo",
+      "status": "operational"
+    },
+    {
+      "id": "svc-fastapi-remote",
+      "name": "TTAi Remote API",
+      "type": "api",
+      "node_id": "node-vwo",
+      "status": "operational"
+    }
+  ],
+  "dependencies": [
+    {
+      "source_service_id": "svc-lb-8015",
+      "target_service_id": "svc-debug-8013",
+      "type": "api_call",
+      "critical": true
+    },
+    {
+      "source_service_id": "svc-lb-8015",
+      "target_service_id": "svc-fastapi-remote",
+      "type": "api_call",
+      "critical": false
+    },
+    {
+      "source_service_id": "svc-hybrid-8005",
+      "target_service_id": "svc-cliproxy-8317",
+      "type": "api_call",
+      "critical": true
+    },
+    {
+      "source_service_id": "svc-hybrid-8005",
+      "target_service_id": "svc-ollama-public",
+      "type": "api_call",
+      "critical": true
+    },
+    {
+      "source_service_id": "svc-rag-8075",
+      "target_service_id": "svc-ollama-memory",
+      "type": "api_call",
+      "critical": true
+    },
+    {
+      "source_service_id": "svc-wordpress",
+      "target_service_id": "svc-mysql",
+      "type": "database",
+      "critical": true
+    },
+    {
+      "source_service_id": "svc-fastapi-prod",
+      "target_service_id": "svc-postgres",
+      "type": "database",
+      "critical": true
+    }
+  ]
+}

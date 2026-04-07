@@ -1,0 +1,426 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-04-08T00:55:00+07:00",
+  "nodes": [
+    {
+      "id": "node-vannt-home-pc",
+      "name": "vannt-home-pc",
+      "hostname": "vannt-home-pc",
+      "role": "development",
+      "ip_local": "192.168.1.101",
+      "ip_tailscale": "100.115.49.12",
+      "description": "Primary development machine, hosts multiple TTAi services, Ollama local, OpenClaw workspace",
+      "status": "operational"
+    },
+    {
+      "id": "node-vannt-work-op",
+      "name": "vannt-work-op",
+      "hostname": "vannt-work-op",
+      "role": "compute",
+      "ip_local": "unknown",
+      "ip_tailscale": "100.89.201.7",
+      "description": "Remote compute node, runs Ollama remote, Docker test environment",
+      "status": "operational"
+    },
+    {
+      "id": "node-dell-zx0q",
+      "name": "Dell Zx0Q (vannt-home-zq)",
+      "hostname": "vannt-home-zq",
+      "role": "production",
+      "ip_local": "192.168.1.102",
+      "ip_tailscale": "unknown",
+      "description": "Production host, runs WordPress, FastAPI production, full database stack",
+      "status": "operational"
+    }
+  ],
+  "networks": [
+    {
+      "id": "net-local-lan",
+      "name": "Local LAN",
+      "type": "local_lan",
+      "cidr": "192.168.1.0/24",
+      "description": "Home local network"
+    },
+    {
+      "id": "net-tailscale",
+      "name": "Tailscale Mesh",
+      "type": "tailscale",
+      "cidr": "100.64.0.0/10",
+      "description": "Tailscale VPN mesh network connecting all nodes"
+    },
+    {
+      "id": "net-public",
+      "name": "Public Internet",
+      "type": "public_internet",
+      "cidr": "0.0.0.0/0",
+      "description": "Public internet exposure"
+    }
+  ],
+  "services": [
+    {
+      "id": "svc-fastapi-original-8000",
+      "name": "FastAPI Original",
+      "type": "api",
+      "node_id": "node-vannt-home-pc",
+      "description": "Original FastAPI server (core TTAi API)",
+      "health_endpoint": "http://localhost:8000/",
+      "status": "offline",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-ttai-hybrid-8005",
+      "name": "TTAi Hybrid v2.0",
+      "type": "api",
+      "node_id": "node-vannt-home-pc",
+      "description": "Advanced hybrid API with 7 providers (3 local Ollama + 1 remote Ollama + 3 cloud APIs)",
+      "health_endpoint": "http://localhost:8005/",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-ttai-debug-8013",
+      "name": "TTAi Debug",
+      "type": "api",
+      "node_id": "node-vannt-home-pc",
+      "description": "Minimal working version, local Ollama only",
+      "health_endpoint": "http://localhost:8013/",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-load-balancer-8015",
+      "name": "Load Balancer",
+      "type": "load_balancer",
+      "node_id": "node-vannt-home-pc",
+      "description": "Simple proxy load balancer distributing requests to backends",
+      "health_endpoint": "http://localhost:8015/health",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-rag-service-8075",
+      "name": "TTAi RAG Service",
+      "type": "memory",
+      "node_id": "node-vannt-home-pc",
+      "description": "RAG-V1 memory retrieval service",
+      "health_endpoint": "http://localhost:8075/health",
+      "status": "unknown",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-control-dashboard-8090",
+      "name": "TTAi Control Dashboard",
+      "type": "dashboard",
+      "node_id": "node-vannt-home-pc",
+      "description": "Admin/operator console for system visibility",
+      "health_endpoint": "http://localhost:8090/",
+      "status": "unknown",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-cli-proxy-8317",
+      "name": "TTAi CLI Proxy",
+      "type": "cli_proxy",
+      "node_id": "node-vannt-home-pc",
+      "description": "CLI proxy for cloud API integrations (DeepSeek, GPT, Gemini)",
+      "health_endpoint": "https://127.0.0.1:8317/",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-ollama-public-11434",
+      "name": "Ollama Public/Default",
+      "type": "ai_inference",
+      "node_id": "node-vannt-home-pc",
+      "description": "Public/default Ollama service for general AI inference",
+      "health_endpoint": "http://localhost:11434/api/tags",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-ollama-memory-11435",
+      "name": "Ollama Memory-Only",
+      "type": "ai_inference",
+      "node_id": "node-vannt-home-pc",
+      "description": "Private memory-only Ollama instance for RAG-V2.3 memory tasks",
+      "health_endpoint": "http://127.0.0.1:11435/api/tags",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-wordpress-prod-8080",
+      "name": "WordPress Production Portal",
+      "type": "cms",
+      "node_id": "node-dell-zx0q",
+      "description": "Production WordPress portal for user access",
+      "health_endpoint": "http://192.168.1.102:8080/",
+      "status": "offline",
+      "exposure": "lan"
+    },
+    {
+      "id": "svc-fastapi-prod-8000-dell",
+      "name": "FastAPI Production",
+      "type": "api",
+      "node_id": "node-dell-zx0q",
+      "description": "Production FastAPI backend on Dell Zx0Q",
+      "health_endpoint": "http://192.168.1.102:8000/",
+      "status": "offline",
+      "exposure": "lan"
+    },
+    {
+      "id": "svc-postgresql-dell",
+      "name": "PostgreSQL (ttai)",
+      "type": "database",
+      "node_id": "node-dell-zx0q",
+      "description": "Primary user data database",
+      "health_endpoint": "tcp://192.168.1.102:5432",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-mysql-dell",
+      "name": "MySQL (ttai_wp)",
+      "type": "database",
+      "node_id": "node-dell-zx0q",
+      "description": "WordPress database",
+      "health_endpoint": "tcp://192.168.1.102:3306",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-redis-dell",
+      "name": "Redis Cache",
+      "type": "cache",
+      "node_id": "node-dell-zx0q",
+      "description": "Redis caching layer",
+      "health_endpoint": "tcp://192.168.1.102:6379",
+      "status": "operational",
+      "exposure": "local_only"
+    },
+    {
+      "id": "svc-ollama-remote-11434",
+      "name": "Ollama Remote",
+      "type": "ai_inference",
+      "node_id": "node-vannt-work-op",
+      "description": "Remote Ollama service on vannt-work-op",
+      "health_endpoint": "http://100.89.201.7:11434/api/tags",
+      "status": "operational",
+      "exposure": "tailscale"
+    },
+    {
+      "id": "svc-fastapi-remote-8000",
+      "name": "TTAi Remote API",
+      "type": "api",
+      "node_id": "node-vannt-work-op",
+      "description": "Remote TTAi API endpoint",
+      "health_endpoint": "http://100.89.201.7:8000/",
+      "status": "operational",
+      "exposure": "tailscale"
+    }
+  ],
+  "ports": [
+    {
+      "id": "port-8000-vhp",
+      "number": 8000,
+      "protocol": "tcp",
+      "service_id": "svc-fastapi-original-8000",
+      "node_id": "node-vannt-home-pc",
+      "description": "FastAPI Original port",
+      "status": "closed"
+    },
+    {
+      "id": "port-8005-vhp",
+      "number": 8005,
+      "protocol": "tcp",
+      "service_id": "svc-ttai-hybrid-8005",
+      "node_id": "node-vannt-home-pc",
+      "description": "TTAi Hybrid v2.0 port",
+      "status": "listening"
+    },
+    {
+      "id": "port-8013-vhp",
+      "number": 8013,
+      "protocol": "tcp",
+      "service_id": "svc-ttai-debug-8013",
+      "node_id": "node-vannt-home-pc",
+      "description": "TTAi Debug port",
+      "status": "listening"
+    },
+    {
+      "id": "port-8015-vhp",
+      "number": 8015,
+      "protocol": "tcp",
+      "service_id": "svc-load-balancer-8015",
+      "node_id": "node-vannt-home-pc",
+      "description": "Load Balancer port",
+      "status": "listening"
+    },
+    {
+      "id": "port-8075-vhp",
+      "number": 8075,
+      "protocol": "tcp",
+      "service_id": "svc-rag-service-8075",
+      "node_id": "node-vannt-home-pc",
+      "description": "RAG Service port",
+      "status": "unknown"
+    },
+    {
+      "id": "port-8090-vhp",
+      "number": 8090,
+      "protocol": "tcp",
+      "service_id": "svc-control-dashboard-8090",
+      "node_id": "node-vannt-home-pc",
+      "description": "Control Dashboard port",
+      "status": "unknown"
+    },
+    {
+      "id": "port-8317-vhp",
+      "number": 8317,
+      "protocol": "tcp",
+      "service_id": "svc-cli-proxy-8317",
+      "node_id": "node-vannt-home-pc",
+      "description": "CLI Proxy port (HTTPS)",
+      "status": "listening"
+    },
+    {
+      "id": "port-11434-vhp",
+      "number": 11434,
+      "protocol": "tcp",
+      "service_id": "svc-ollama-public-11434",
+      "node_id": "node-vannt-home-pc",
+      "description": "Ollama Public port",
+      "status": "listening"
+    },
+    {
+      "id": "port-11435-vhp",
+      "number": 11435,
+      "protocol": "tcp",
+      "service_id": "svc-ollama-memory-11435",
+      "node_id": "node-vannt-home-pc",
+      "description": "Ollama Memory-Only port",
+      "status": "listening"
+    },
+    {
+      "id": "port-8080-dell",
+      "number": 8080,
+      "protocol": "tcp",
+      "service_id": "svc-wordpress-prod-8080",
+      "node_id": "node-dell-zx0q",
+      "description": "WordPress Production port",
+      "status": "closed"
+    },
+    {
+      "id": "port-8000-dell",
+      "number": 8000,
+      "protocol": "tcp",
+      "service_id": "svc-fastapi-prod-8000-dell",
+      "node_id": "node-dell-zx0q",
+      "description": "FastAPI Production port on Dell",
+      "status": "closed"
+    },
+    {
+      "id": "port-5432-dell",
+      "number": 5432,
+      "protocol": "tcp",
+      "service_id": "svc-postgresql-dell",
+      "node_id": "node-dell-zx0q",
+      "description": "PostgreSQL port",
+      "status": "listening"
+    },
+    {
+      "id": "port-3306-dell",
+      "number": 3306,
+      "protocol": "tcp",
+      "service_id": "svc-mysql-dell",
+      "node_id": "node-dell-zx0q",
+      "description": "MySQL port",
+      "status": "listening"
+    },
+    {
+      "id": "port-6379-dell",
+      "number": 6379,
+      "protocol": "tcp",
+      "service_id": "svc-redis-dell",
+      "node_id": "node-dell-zx0q",
+      "description": "Redis port",
+      "status": "listening"
+    },
+    {
+      "id": "port-11434-vwo",
+      "number": 11434,
+      "protocol": "tcp",
+      "service_id": "svc-ollama-remote-11434",
+      "node_id": "node-vannt-work-op",
+      "description": "Ollama Remote port",
+      "status": "listening"
+    },
+    {
+      "id": "port-8000-vwo",
+      "number": 8000,
+      "protocol": "tcp",
+      "service_id": "svc-fastapi-remote-8000",
+      "node_id": "node-vannt-work-op",
+      "description": "TTAi Remote API port",
+      "status": "listening"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "dep-loadbalancer-to-debug",
+      "source_service_id": "svc-load-balancer-8015",
+      "target_service_id": "svc-ttai-debug-8013",
+      "type": "api_call",
+      "description": "Load balancer forwards requests to TTAi Debug",
+      "critical": true
+    },
+    {
+      "id": "dep-loadbalancer-to-remote",
+      "source_service_id": "svc-load-balancer-8015",
+      "target_service_id": "svc-fastapi-remote-8000",
+      "type": "api_call",
+      "description": "Load balancer forwards requests to remote TTAi API",
+      "critical": false
+    },
+    {
+      "id": "dep-hybrid-to-cliproxy",
+      "source_service_id": "svc-ttai-hybrid-8005",
+      "target_service_id": "svc-cli-proxy-8317",
+      "type": "api_call",
+      "description": "TTAi Hybrid uses CLI Proxy for cloud API calls",
+      "critical": true
+    },
+    {
+      "id": "dep-hybrid-to-ollama-local",
+      "source_service_id": "svc-ttai-hybrid-8005",
+      "target_service_id": "svc-ollama-public-11434",
+      "type": "api_call",
+      "description": "TTAi Hybrid uses local Ollama for inference",
+      "critical": true
+    },
+    {
+      "id": "dep-rag-to-ollama-memory",
+      "source_service_id": "svc-rag-service-8075",
+      "target_service_id": "svc-ollama-memory-11435",
+      "type": "api_call",
+      "description": "RAG service uses memory-only Ollama for embeddings",
+      "critical": true
+    },
+    {
+      "id": "dep-wordpress-to-mysql",
+      "source_service_id": "svc-wordpress-prod-8080",
+      "target_service_id": "svc-mysql-dell",
+      "type": "database",
+      "description": "WordPress depends on MySQL database",
+      "critical": true
+    },
+    {
+      "id": "dep-fastapi-prod-to-postgres",
+      "source_service_id": "svc-fastapi-prod-8000-dell",
+      "target_service_id": "svc-postgresql-dell",
+      "type": "database",
+      "description": "Production FastAPI depends on PostgreSQL",
+      "critical": true
+    },
+    {
+      "id": "dep-fastapi-prod-to-redis",
+      "

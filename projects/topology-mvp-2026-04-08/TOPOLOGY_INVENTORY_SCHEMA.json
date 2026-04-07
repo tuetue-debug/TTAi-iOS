@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TTAi/OpenClaw System Topology Inventory",
+  "description": "Structured inventory of nodes, networks, services, ports, and dependencies",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this inventory was generated"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/node"
+      }
+    },
+    "networks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/network"
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/service"
+      }
+    },
+    "ports": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/port"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/dependency"
+      }
+    },
+    "entrypoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/entrypoint"
+      }
+    }
+  },
+  "required": ["version", "timestamp", "nodes", "services", "ports"],
+  "definitions": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique node identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable node name"
+        },
+        "hostname": {
+          "type": "string",
+          "description": "Hostname or machine identifier"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["development", "production", "compute", "gateway", "control", "database", "hybrid"],
+          "description": "Primary role of this node"
+        },
+        "ip_local": {
+          "type": "string",
+          "description": "Local network IP address"
+        },
+        "ip_tailscale": {
+          "type": "string",
+          "description": "Tailscale IP address"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["operational", "degraded", "offline", "unknown"],
+          "default": "unknown"
+        }
+      },
+      "required": ["id", "name", "role", "status"]
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["local_lan", "tailscale", "public_internet", "vpn"]
+        },
+        "cidr": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name", "type"]
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["api", "web", "database", "cache", "ai_inference", "memory", "proxy", "dashboard", "cms", "cli_proxy", "load_balancer", "scheduler"]
+        },
+        "node_id": {
+          "type": "string",
+          "description": "Which node hosts this service"
+        },
+        "description": {
+          "type": "string"
+        },
+        "health_endpoint": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["operational", "degraded", "offline", "unknown"],
+          "default": "unknown"
+        },
+        "exposure": {
+          "type": "string",
+          "enum": ["local_only", "tailscale", "lan", "public"],
+          "description": "How exposed this service is"
+        }
+      },
+      "required": ["id", "name", "type", "node_id", "status", "exposure"]
+    },
+    "port": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["tcp", "udp", "http", "https"]
+        },
+        "service_id": {
+          "type": "string",
+          "description": "Which service uses this port"
+        },
+        "node_id": {
+          "type": "string",
+          "description": "Which node this port is on"
+        },
+        "description": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["listening", "closed", "filtered", "unknown"],
+          "default": "unknown"
+        }
+      },
+      "required": ["id", "number", "protocol", "service_id", "node_id", "status"]
+    },
+    "dependency": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source_service_id": {
+          "type": "string",
+          "description": "Service that depends on another"
+        },
+        "target_service_id": {
+          "type": "string",
+          "description": "Service being depended upon"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["api_call", "database", "cache", "file_system", "network", "authentication"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "critical": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": ["id", "source_service_id", "target_service_id", "type"]
+    },
+    "entrypoint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "service_id": {
+          "type": "string"
+        },
+        "user_facing": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name", "url", "service_id", "user_facing"]
+    }
+  }
+}
