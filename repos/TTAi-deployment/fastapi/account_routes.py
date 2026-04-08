@@ -1,15 +1,16 @@
 """
 Account Routes for TTAi API
-Provides truthful account/profile surfaces separated from auth/session routes.
+Provides truthful account/profile/usage surfaces separated from auth/session routes.
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
 
 from user_auth import get_current_active_user
 from user_routes import build_user_response
 from user_auth import USER_REPOSITORY
+from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
 
 router = APIRouter(prefix="/api/v1/account", tags=["account"])
 
@@ -42,3 +43,53 @@ async def update_account_profile(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Account profile update failed: {str(exc)}") from exc
+
+
+@router.get("/usage/summary")
+async def get_account_usage_summary(
+    limit: int = Query(default=500, ge=1, le=5000),
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Return summarized usage for the authenticated user."""
+    try:
+        events = read_usage_events(limit=limit)
+        filtered = filter_usage_events(events, user_id=str(current_user["id"]))
+        return {
+            "user_id": str(current_user["id"]),
+            "summary": summarize_usage_events(filtered),
+            "count": len(filtered),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Account usage summary failed: {str(exc)}") from exc
+
+
+@router.get("/usage/events")
+async def get_account_usage_events(
+    limit: int = Query(default=50, ge=1, le=500),
+    status: Optional[str] = Query(default=None),
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Return recent usage events for the authenticated user."""
+    try:
+        events = read_usage_events(limit=max(limit * 5, 200))
+        filtered = filter_usage_events(
+            events,
+            user_id=str(current_user["id"]),
+            status=status,
+        )
+        filtered = filtered[:limit]
+        return {
+            "user_id": str(current_user["id"]),
+            "items": filtered,
+            "count": len(filtered),
+            "filters": {
+                "status": status,
+                "limit": limit,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Account usage events failed: {str(exc)}") from exc
