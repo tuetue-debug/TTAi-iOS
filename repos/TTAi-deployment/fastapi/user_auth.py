@@ -598,12 +598,7 @@ class UserRepository:
 
     def ensure_dev_seed_user(self) -> bool:
         self.init_db()
-        environment = get_runtime_environment()
-        if environment not in {"dev", "development", "local", "test"}:
-            return False
-
-        seed_toggle = (os.getenv("TTAI_AUTH_SEED_TEST_USER", "1") or "").strip().lower()
-        if seed_toggle in {"0", "false", "no", "off"}:
+        if not should_seed_dev_user():
             return False
 
         seed_email = os.getenv("TTAI_AUTH_SEED_EMAIL", "test@example.com")
@@ -632,6 +627,38 @@ def get_runtime_environment() -> str:
         or os.getenv("TTAI_ENV")
         or "development"
     ).strip().lower()
+
+
+def is_dev_like_environment() -> bool:
+    return get_runtime_environment() in {"dev", "development", "local", "test"}
+
+
+def should_expose_auth_tokens_in_response() -> bool:
+    env_value = (os.getenv("TTAI_AUTH_EXPOSE_FLOW_TOKENS") or "").strip().lower()
+    if env_value in {"1", "true", "yes", "on"}:
+        if not is_dev_like_environment():
+            logger.warning(
+                "TTAI_AUTH_EXPOSE_FLOW_TOKENS was explicitly enabled outside a dev-like lane. "
+                "This should only be used for tightly controlled diagnostics."
+            )
+        return True
+    if env_value in {"0", "false", "no", "off"}:
+        return False
+    return is_dev_like_environment()
+
+
+def should_seed_dev_user() -> bool:
+    seed_toggle = (os.getenv("TTAI_AUTH_SEED_TEST_USER", "1") or "").strip().lower()
+    if seed_toggle in {"0", "false", "no", "off"}:
+        return False
+    if not is_dev_like_environment():
+        if seed_toggle in {"1", "true", "yes", "on"}:
+            logger.warning(
+                "Ignoring TTAI_AUTH_SEED_TEST_USER outside dev-like environment. "
+                "Dev seed users are disabled in serious lanes."
+            )
+        return False
+    return True
 
 
 def get_jwt_secret() -> str:
