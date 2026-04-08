@@ -22,6 +22,7 @@ from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
 from auth import get_current_admin_user, get_current_control_user, validate_admin_token, CONTROL_SESSION_COOKIE, should_use_secure_cookie
 from user_routes import router as user_auth_router
+from account_routes import router as account_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -438,8 +439,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Include user authentication routes
+# Include user/account routes
 app.include_router(user_auth_router)
+app.include_router(account_router)
 
 # Mount Control Dashboard
 CONTROL_FRONTEND_PATH = BASE_DIR.parent / "control-frontend"
