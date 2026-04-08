@@ -24,6 +24,7 @@ from auth import get_current_admin_user, get_current_control_user, validate_admi
 from user_routes import router as user_auth_router
 from account_routes import router as account_router
 from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
+from billing_store import load_billing_config, check_quota_allowance, summarize_billing_usage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,54 +43,6 @@ def estimate_tokens(text: str) -> int:
     if not text:
         return 0
     return max(1, len(text) // 4)
-
-def load_billing_config() -> Dict:
-    if not BILLING_CONFIG_PATH.exists():
-        return {
-            "version": "0.0.0",
-            "api_keys": {},
-            "tenants": {},
-            "user_rules": {
-                "non_billable_prefixes": [
-                    "metering_",
-                    "smoke_",
-                    "cost_estimation_",
-                    "test_",
-                    "debug_",
-                    "internal_"
-                ],
-                "non_billable_exact": [
-                    "anonymous",
-                    "admin",
-                    "system"
-                ]
-            }
-        }
-    try:
-        with open(BILLING_CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        logger.warning(f"Failed to load billing config: {e}, using defaults")
-        return {
-            "version": "0.0.0",
-            "api_keys": {},
-            "tenants": {},
-            "user_rules": {
-                "non_billable_prefixes": [
-                    "metering_",
-                    "smoke_",
-                    "cost_estimation_",
-                    "test_",
-                    "debug_",
-                    "internal_"
-                ],
-                "non_billable_exact": [
-                    "anonymous",
-                    "admin",
-                    "system"
-                ]
-            }
-        }
 
 def write_usage_event(event: Dict):
     with open(USAGE_EVENTS_PATH, "a", encoding="utf-8") as f:
@@ -163,118 +116,6 @@ def estimate_cost(model_name: Optional[str], total_tokens_est: int, provider_typ
     return {
         "estimated_cost": None,
         "cost_estimate_mode": None
-    }
-
-
-def get_quota_policy(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
-    user_id = (user_id or "anonymous").strip().lower()
-    api_key_id = (api_key_id or "").strip().lower()
-    tenant_id = (tenant_id or "").strip().lower()
-    config = load_billing_config()
-    quota_config = config.get("quota", {})
-
-    if api_key_id:
-        api_key_policy = quota_config.get("api_keys", {}).get(api_key_id)
-        if api_key_policy is not None:
-            policy = dict(api_key_policy)
-            policy["quota_mode"] = "api_key_quota_v1"
-            return policy
-
-    if tenant_id:
-        tenant_policy = quota_config.get("tenants", {}).get(tenant_id)
-        if tenant_policy is not None:
-            policy = dict(tenant_policy)
-            policy["quota_mode"] = "tenant_quota_v1"
-            return policy
-
-    default_policy = dict(quota_config.get("default", {}))
-    default_policy["quota_mode"] = "default_quota_v1"
-    return default_policy
-
-
-def get_quota_usage(events: List[Dict]) -> Dict:
-    return {
-        "requests": len([e for e in events if e.get("status") == "success"]),
-        "tokens_est": sum(int(e.get("total_tokens_est") or 0) for e in events if e.get("status") == "success"),
-        "estimated_cost": round(sum(float(e.get("estimated_cost") or 0.0) for e in events if e.get("status") == "success"), 8),
-    }
-
-
-def check_quota_allowance(user_id: Optional[str], api_key_id: Optional[str] = None, tenant_id: Optional[str] = None) -> Dict:
-    policy = get_quota_policy(user_id=user_id, api_key_id=api_key_id, tenant_id=tenant_id)
-    if not policy.get("enabled", False):
-        return {
-            "allowed": True,
-            "quota_enabled": False,
-            "quota_mode": policy.get("quota_mode"),
-            "policy": policy,
-            "usage": {"requests": 0, "tokens_est": 0, "estimated_cost": 0.0},
-            "remaining": {
-                "requests": None,
-                "tokens_est": None,
-                "estimated_cost": None,
-            },
-            "reason": None,
-        }
-
-    all_events = read_usage_events(limit=5000)
-    filtered_events = all_events
-    if api_key_id:
-        filtered_events = [e for e in filtered_events if (e.get("api_key_id") or "") == api_key_id]
-    elif tenant_id:
-        filtered_events = [e for e in filtered_events if (e.get("tenant_id") or "") == tenant_id]
-    else:
-        filtered_events = [e for e in filtered_events if (e.get("user_id") or "") == (user_id or "anonymous")]
-
-    usage = get_quota_usage(filtered_events)
-    max_requests = policy.get("max_requests")
-    max_tokens_est = policy.get("max_tokens_est")
-    max_estimated_cost = policy.get("max_estimated_cost")
-    remaining = {
-        "requests": max(max_requests - usage["requests"], 0) if max_requests is not None else None,
-        "tokens_est": max(max_tokens_est - usage["tokens_est"], 0) if max_tokens_est is not None else None,
-        "estimated_cost": round(max(float(max_estimated_cost) - usage["estimated_cost"], 0.0), 8) if max_estimated_cost is not None else None,
-    }
-
-    if max_requests is not None and usage["requests"] >= max_requests:
-        return {
-            "allowed": False,
-            "quota_enabled": True,
-            "quota_mode": policy.get("quota_mode"),
-            "policy": policy,
-            "usage": usage,
-            "remaining": remaining,
-            "reason": "max_requests_exceeded",
-        }
-    if max_tokens_est is not None and usage["tokens_est"] >= max_tokens_est:
-        return {
-            "allowed": False,
-            "quota_enabled": True,
-            "quota_mode": policy.get("quota_mode"),
-            "policy": policy,
-            "usage": usage,
-            "remaining": remaining,
-            "reason": "max_tokens_est_exceeded",
-        }
-    if max_estimated_cost is not None and usage["estimated_cost"] >= float(max_estimated_cost):
-        return {
-            "allowed": False,
-            "quota_enabled": True,
-            "quota_mode": policy.get("quota_mode"),
-            "policy": policy,
-            "usage": usage,
-            "remaining": remaining,
-            "reason": "max_estimated_cost_exceeded",
-        }
-
-    return {
-        "allowed": True,
-        "quota_enabled": True,
-        "quota_mode": policy.get("quota_mode"),
-        "policy": policy,
-        "usage": usage,
-        "remaining": remaining,
-        "reason": None,
     }
 
 
@@ -2469,75 +2310,5 @@ async def update_billing_config(new_config: Dict, current_user = Depends(get_cur
     except Exception as e:
         logger.error(f"Failed to update billing config: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update config: {str(e)}")
-
-def summarize_billing_usage(events: List[Dict]) -> Dict:
-    if not events:
-        return {
-            "total_estimated_cost": 0.0,
-            "billable_estimated_cost": 0.0,
-            "non_billable_estimated_cost": 0.0,
-            "billable_events": 0,
-            "non_billable_events": 0,
-            "billable_mode_breakdown": {},
-            "tenant_breakdown": {},
-            "api_key_breakdown": {},
-            "provider_breakdown": {},
-        }
-    
-    total_estimated_cost = 0.0
-    billable_estimated_cost = 0.0
-    non_billable_estimated_cost = 0.0
-    billable_events = 0
-    non_billable_events = 0
-    billable_mode_counts = {}
-    tenant_costs = {}
-    api_key_costs = {}
-    provider_costs = {}
-    
-    for e in events:
-        cost = e.get("estimated_cost")
-        if cost is None:
-            cost = 0.0
-        total_estimated_cost += cost
-        
-        is_billable = e.get("billing_billable", False)
-        if is_billable:
-            billable_estimated_cost += cost
-            billable_events += 1
-        else:
-            non_billable_estimated_cost += cost
-            non_billable_events += 1
-        
-        billable_mode = e.get("billable_mode", "unknown")
-        billable_mode_counts[billable_mode] = billable_mode_counts.get(billable_mode, 0) + 1
-        
-        tenant_id = e.get("tenant_id")
-        if tenant_id:
-            tenant_costs[tenant_id] = tenant_costs.get(tenant_id, 0.0) + cost
-        
-        api_key_id = e.get("api_key_id")
-        if api_key_id:
-            api_key_costs[api_key_id] = api_key_costs.get(api_key_id, 0.0) + cost
-        
-        provider = e.get("provider")
-        if provider:
-            provider_costs[provider] = provider_costs.get(provider, 0.0) + cost
-    
-    def sort_dict_by_value(d, reverse=True):
-        return dict(sorted(d.items(), key=lambda x: x[1], reverse=reverse))
-    
-    return {
-        "total_estimated_cost": round(total_estimated_cost, 6),
-        "billable_estimated_cost": round(billable_estimated_cost, 6),
-        "non_billable_estimated_cost": round(non_billable_estimated_cost, 6),
-        "billable_events": billable_events,
-        "non_billable_events": non_billable_events,
-        "billable_mode_breakdown": sort_dict_by_value(billable_mode_counts),
-        "tenant_breakdown": sort_dict_by_value(tenant_costs),
-        "api_key_breakdown": sort_dict_by_value(api_key_costs),
-        "provider_breakdown": sort_dict_by_value(provider_costs),
-    }
-
-
 
 
