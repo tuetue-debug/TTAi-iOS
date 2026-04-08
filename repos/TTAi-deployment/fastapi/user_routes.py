@@ -23,6 +23,7 @@ from user_auth import (
     hash_password,
     verify_password,
 )
+from auth_delivery import build_forgot_password_delivery_response, build_verify_email_delivery_response
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 
@@ -175,13 +176,7 @@ async def request_email_verification(current_user: dict = Depends(get_current_ac
     """Issue an email verification token for the current user."""
     try:
         result = USER_REPOSITORY.create_email_verification_token(user_id=str(current_user["id"]))
-        return {
-            "message": "Email verification instructions have been prepared.",
-            "issued": True,
-            "verification_token": result.get("verification_token"),
-            "expires_in": result.get("expires_in"),
-            "expires_at": result.get("expires_at"),
-        }
+        return build_verify_email_delivery_response(result)
     except HTTPException:
         raise
     except Exception as exc:
@@ -208,15 +203,7 @@ async def forgot_password(payload: ForgotPasswordRequest):
     """Issue password reset token if the email exists."""
     try:
         result = USER_REPOSITORY.create_password_reset_token(email=str(payload.email))
-        response = {
-            "message": "If the account exists, password reset instructions have been prepared.",
-            "issued": result.get("issued", False),
-        }
-        if result.get("issued"):
-            response["reset_token"] = result.get("reset_token")
-            response["expires_in"] = result.get("expires_in")
-            response["expires_at"] = result.get("expires_at")
-        return response
+        return build_forgot_password_delivery_response(result)
     except HTTPException:
         raise
     except Exception as exc:
