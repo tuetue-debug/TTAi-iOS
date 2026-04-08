@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
+from user_auth import USER_REPOSITORY
+
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_API_KEYS_DB_PATH = BASE_DIR / "data" / "auth_dev.sqlite3"
 API_KEY_PREFIX = "sk-ttai-"
@@ -158,6 +160,41 @@ class APIKeyRepository:
         if not stored:
             raise HTTPException(status_code=404, detail="API key not found")
         return stored
+
+    def authenticate_api_key(self, raw_api_key: str) -> Dict[str, Any]:
+        self.init_db()
+        token_hash = hashlib.sha256(raw_api_key.encode("utf-8")).hexdigest()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM api_keys
+                WHERE key_hash = ? AND is_active = 1 AND revoked_at IS NULL
+                LIMIT 1
+                """,
+                (token_hash,),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=401, detail="Invalid API key")
+
+            now = datetime.utcnow().isoformat()
+            conn.execute(
+                "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
+                (now, row["id"]),
+            )
+            conn.commit()
+
+        api_key = self._row_to_api_key(row)
+        if not api_key:
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        user = USER_REPOSITORY.get_user_by_id(str(api_key["user_id"]))
+        if not user or not user["is_active"]:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        return {
+            "user": user,
+            "api_key": api_key,
+        }
 
     @staticmethod
     def _parse_api_key_id(api_key_id: str) -> int:

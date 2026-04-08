@@ -25,6 +25,7 @@ from user_routes import router as user_auth_router
 from account_routes import router as account_router
 from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
 from billing_store import load_billing_config, check_quota_allowance, summarize_billing_usage
+from api_key_auth import get_api_key_identity
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -600,6 +601,7 @@ async def health_detailed():
 @app.post(API_V1_CHAT, response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    http_request: Request,
     x_ttai_api_key_id: Optional[str] = Header(default=None),
     x_ttai_tenant_id: Optional[str] = Header(default=None),
 ):
@@ -617,6 +619,19 @@ async def chat(
     request_id = str(uuid.uuid4())
     request_api_key_id = request.api_key_id or x_ttai_api_key_id
     request_tenant_id = request.tenant_id or x_ttai_tenant_id
+
+    api_key_identity = None
+    x_api_key_value = http_request.headers.get("x-api-key")
+    auth_header = http_request.headers.get("authorization")
+    if x_api_key_value or (auth_header and auth_header.lower().startswith("bearer sk-ttai-")):
+        api_key_identity = await get_api_key_identity(
+            x_api_key=x_api_key_value,
+            authorization=auth_header,
+        )
+        request_api_key_id = api_key_identity["api_key"].get("id")
+        if not request.user_id:
+            request.user_id = str(api_key_identity["user"].get("id"))
+
     fallback_used = False
     final_status = "success"
     final_http_status = 200
@@ -1260,6 +1275,20 @@ async def create_user():
     return {"message": "User created (placeholder)"}
 
 # Ollama endpoints (Step 7 - Hybrid AI Pipeline)
+@app.get("/api/v1/auth/api-key/me")
+async def get_api_key_authenticated_identity(identity = Depends(get_api_key_identity)):
+    """Resolve current identity from API key for verification/testing."""
+    return {
+        "user": {
+            "id": identity["user"]["id"],
+            "email": identity["user"]["email"],
+            "name": identity["user"]["name"],
+            "role": identity["user"]["role"],
+        },
+        "api_key": identity["api_key"],
+    }
+
+
 @app.get("/api/ollama/models")
 @app.get(API_V1_OLLAMA_MODELS)
 async def get_ollama_models():
