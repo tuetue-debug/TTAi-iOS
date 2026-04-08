@@ -126,6 +126,23 @@ class UserRepository:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT,
+                    revoked_at TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id)"
+            )
             conn.commit()
 
         self._initialized = True
@@ -368,6 +385,88 @@ class UserRepository:
                 "is_active": row["revoked_at"] is None and expires_at > now,
             })
         return sessions
+
+    def create_password_reset_token(self, *, email: str) -> Dict[str, Any]:
+        self.init_db()
+        user = self.get_user_by_email(email)
+        if not user:
+            return {
+                "issued": False,
+                "email": email,
+            }
+
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        created_at = datetime.utcnow()
+        expires_at = created_at + timedelta(hours=1)
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO password_reset_tokens (user_id, token_hash, created_at, expires_at, used_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user["id"],
+                    token_hash,
+                    created_at.isoformat(),
+                    expires_at.isoformat(),
+                    None,
+                    None,
+                ),
+            )
+            conn.commit()
+
+        return {
+            "issued": True,
+            "email": user["email"],
+            "reset_token": raw_token,
+            "expires_in": 3600,
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def consume_password_reset_token(self, *, token: str, new_password: str) -> Dict[str, Any]:
+        self.init_db()
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM password_reset_tokens
+                WHERE token_hash = ?
+                LIMIT 1
+                """,
+                (token_hash,),
+            ).fetchone()
+
+            if row is None:
+                raise HTTPException(status_code=400, detail="Invalid reset token")
+            if row["revoked_at"] is not None or row["used_at"] is not None:
+                raise HTTPException(status_code=400, detail="Reset token is no longer valid")
+
+            expires_at = datetime.fromisoformat(row["expires_at"])
+            if expires_at <= datetime.utcnow():
+                raise HTTPException(status_code=400, detail="Reset token expired")
+
+            password_hash = hash_password(new_password)
+            updated_at = datetime.utcnow().isoformat()
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (password_hash, updated_at, row["user_id"]),
+            )
+            conn.execute(
+                "UPDATE password_reset_tokens SET used_at = ? WHERE id = ?",
+                (datetime.utcnow().isoformat(), row["id"]),
+            )
+            conn.execute(
+                "UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                (datetime.utcnow().isoformat(), row["user_id"]),
+            )
+            conn.commit()
+
+        user = self.get_user_by_id(str(row["user_id"]))
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
 
     def ensure_dev_seed_user(self) -> bool:
         self.init_db()

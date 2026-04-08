@@ -118,6 +118,15 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
 class LogoutRequest(BaseModel):
     refresh_token: Optional[str] = None
     all_sessions: bool = False
@@ -148,6 +157,45 @@ async def refresh_access_token(payload: RefreshTokenRequest):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Refresh failed: {str(exc)}") from exc
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    """Issue password reset token if the email exists."""
+    try:
+        result = USER_REPOSITORY.create_password_reset_token(email=str(payload.email))
+        response = {
+            "message": "If the account exists, password reset instructions have been prepared.",
+            "issued": result.get("issued", False),
+        }
+        if result.get("issued"):
+            response["reset_token"] = result.get("reset_token")
+            response["expires_in"] = result.get("expires_in")
+            response["expires_at"] = result.get("expires_at")
+        return response
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Forgot password failed: {str(exc)}") from exc
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    """Consume reset token and set a new password."""
+    try:
+        if len(payload.new_password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        USER_REPOSITORY.consume_password_reset_token(
+            token=payload.token,
+            new_password=payload.new_password,
+        )
+        return {
+            "message": "Password reset successfully",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Reset password failed: {str(exc)}") from exc
 
 
 @router.put("/change-password")
