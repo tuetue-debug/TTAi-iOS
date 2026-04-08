@@ -2,16 +2,17 @@
 Account Routes for TTAi API
 Provides truthful account/profile/usage surfaces separated from auth/session routes.
 """
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from user_auth import get_current_active_user
 from user_routes import build_user_response
 from user_auth import USER_REPOSITORY
 from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
 from billing_store import summarize_billing_usage, check_quota_allowance
+from api_key_store import API_KEY_REPOSITORY
 
 router = APIRouter(prefix="/api/v1/account", tags=["account"])
 
@@ -19,6 +20,11 @@ router = APIRouter(prefix="/api/v1/account", tags=["account"])
 class UpdateAccountProfileRequest(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+
+
+class CreateAPIKeyRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    scopes: List[str] = Field(default_factory=list)
 
 
 @router.get("/profile")
@@ -131,3 +137,60 @@ async def get_account_billing_limits(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Account billing limits failed: {str(exc)}") from exc
+
+
+@router.get("/api-keys")
+async def get_account_api_keys(current_user: dict = Depends(get_current_active_user)):
+    """List API keys for the authenticated user."""
+    try:
+        items = API_KEY_REPOSITORY.list_user_api_keys(str(current_user["id"]))
+        return {
+            "user_id": str(current_user["id"]),
+            "items": items,
+            "count": len(items),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Account API keys listing failed: {str(exc)}") from exc
+
+
+@router.post("/api-keys")
+async def create_account_api_key(
+    payload: CreateAPIKeyRequest,
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Create API key for the authenticated user. Full secret is returned once."""
+    try:
+        created = API_KEY_REPOSITORY.create_api_key(
+            user_id=str(current_user["id"]),
+            name=payload.name,
+            scopes=payload.scopes,
+        )
+        return created
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Account API key creation failed: {str(exc)}") from exc
+
+
+@router.delete("/api-keys/{key_id}")
+async def revoke_account_api_key(
+    key_id: str,
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Revoke API key owned by the authenticated user."""
+    try:
+        revoked = API_KEY_REPOSITORY.revoke_api_key(
+            user_id=str(current_user["id"]),
+            api_key_id=key_id,
+        )
+        return {
+            "ok": True,
+            "message": "API key revoked",
+            "item": revoked,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Account API key revoke failed: {str(exc)}") from exc
