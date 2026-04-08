@@ -144,59 +144,39 @@ async def logout():
     return {"message": "Logged out successfully"}
 
 
-# Mock API Keys endpoints (to be implemented with database)
+# Deprecated auth/account crossover endpoints kept temporarily for compatibility.
 @router.get("/api-keys")
 async def get_api_keys(current_user: dict = Depends(get_current_active_user)):
-    """Get user's API keys."""
-    return [
-        {
-            "id": "1",
-            "name": "Production Key",
-            "key": f"sk-ttai-{current_user['id'][:8]}...abcd",
-            "created_at": datetime.utcnow().isoformat(),
-            "last_used": datetime.utcnow().isoformat(),
-            "permissions": ["read", "write"],
-            "is_active": True,
-        },
-        {
-            "id": "2",
-            "name": "Development Key",
-            "key": f"sk-ttai-{current_user['id'][:8]}...efgh",
-            "created_at": datetime.utcnow().isoformat(),
-            "last_used": datetime.utcnow().isoformat(),
-            "permissions": ["read"],
-            "is_active": True,
-        },
-    ]
+    """Deprecated. Use /api/v1/account/api-keys instead."""
+    return {
+        "deprecated": True,
+        "message": "Use /api/v1/account/api-keys instead of /api/v1/auth/api-keys.",
+        "replacement": "/api/v1/account/api-keys",
+        "user_id": str(current_user["id"]),
+    }
 
 
-# Mock Usage endpoints
 @router.get("/usage/stats")
 async def get_usage_stats(
     period: str = "30d",
     current_user: dict = Depends(get_current_active_user),
 ):
-    """Get usage statistics."""
+    """Deprecated. Use /api/v1/account/usage/summary instead."""
     return {
+        "deprecated": True,
+        "message": "Use /api/v1/account/usage/summary instead of /api/v1/auth/usage/stats.",
+        "replacement": "/api/v1/account/usage/summary",
         "period": period,
-        "total_requests": 1247,
-        "total_tokens": 154892,
-        "estimated_cost": 45.67,
-        "success_rate": 99.2,
-        "avg_response_time": 245,
-        "peak_usage": 89,
+        "user_id": str(current_user["id"]),
     }
 
 
-# Mock Billing endpoints
 @router.get("/billing/summary")
 async def get_billing_summary(current_user: dict = Depends(get_current_active_user)):
-    """Get billing summary."""
+    """Deprecated. Use /api/v1/account/billing/summary instead."""
     return {
-        "current_balance": 45.67,
-        "monthly_cost": 45.67,
-        "total_cost": 145.23,
-        "next_billing_date": "2026-05-01",
-        "payment_method": "Credit Card ****1234",
-        "subscription_status": "active",
+        "deprecated": True,
+        "message": "Use /api/v1/account/billing/summary instead of /api/v1/auth/billing/summary.",
+        "replacement": "/api/v1/account/billing/summary",
+        "user_id": str(current_user["id"]),
     }
