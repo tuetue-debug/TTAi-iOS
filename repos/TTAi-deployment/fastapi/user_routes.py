@@ -97,19 +97,24 @@ class UpdateProfileRequest(BaseModel):
     email: Optional[EmailStr] = None
 
 
-@router.put("/me", response_model=UserResponse)
+@router.put("/me")
 async def update_user_profile(
     update_data: UpdateProfileRequest,
     current_user: dict = Depends(get_current_active_user),
 ):
-    """Update user profile."""
+    """Transitional profile update route. Prefer /api/v1/account/profile."""
     try:
         updated_user = USER_REPOSITORY.update_user_profile(
             user_id=current_user["id"],
             name=update_data.name,
             email=update_data.email,
         )
-        return build_user_response(updated_user)
+        return {
+            "deprecated": True,
+            "message": "Prefer PUT /api/v1/account/profile instead of PUT /api/v1/auth/me.",
+            "replacement": "/api/v1/account/profile",
+            "user": build_user_response(updated_user),
+        }
     except HTTPException:
         raise
     except Exception as exc:
@@ -270,6 +275,18 @@ async def list_sessions(current_user: dict = Depends(get_current_active_user)):
     return {
         "user_id": str(current_user["id"]),
         "items": USER_REPOSITORY.list_active_refresh_sessions(user_id=str(current_user["id"])),
+    }
+
+
+@router.post("/sessions/cleanup")
+async def cleanup_sessions(current_user: dict = Depends(get_current_active_user)):
+    """Lightweight auth/session cleanup helper for the dev lane."""
+    if current_user.get("role") != "user" and current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not allowed")
+    cleanup = USER_REPOSITORY.cleanup_auth_state()
+    return {
+        "message": "Auth state cleanup completed",
+        "cleanup": cleanup,
     }
 
 

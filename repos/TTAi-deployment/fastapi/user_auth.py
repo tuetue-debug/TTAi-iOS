@@ -392,6 +392,29 @@ class UserRepository:
             conn.commit()
         return cursor.rowcount
 
+    def cleanup_auth_state(self) -> Dict[str, int]:
+        self.init_db()
+        now = datetime.utcnow().isoformat()
+        with self._connect() as conn:
+            refresh_deleted = conn.execute(
+                "DELETE FROM refresh_tokens WHERE expires_at < ? OR revoked_at IS NOT NULL",
+                (now,),
+            ).rowcount
+            reset_deleted = conn.execute(
+                "DELETE FROM password_reset_tokens WHERE expires_at < ? OR used_at IS NOT NULL OR revoked_at IS NOT NULL",
+                (now,),
+            ).rowcount
+            verify_deleted = conn.execute(
+                "DELETE FROM email_verification_tokens WHERE expires_at < ? OR used_at IS NOT NULL OR revoked_at IS NOT NULL",
+                (now,),
+            ).rowcount
+            conn.commit()
+        return {
+            "refresh_tokens_deleted": refresh_deleted,
+            "password_reset_tokens_deleted": reset_deleted,
+            "email_verification_tokens_deleted": verify_deleted,
+        }
+
     def list_active_refresh_sessions(self, *, user_id: str) -> list[Dict[str, Any]]:
         self.init_db()
         with self._connect() as conn:
