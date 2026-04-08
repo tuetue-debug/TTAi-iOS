@@ -9,6 +9,7 @@ from pydantic import BaseModel, EmailStr
 
 from user_auth import (
     JWT_EXPIRATION_HOURS,
+    REFRESH_TOKEN_EXPIRATION_DAYS,
     TokenResponse,
     USER_REPOSITORY,
     UserCreate,
@@ -16,6 +17,7 @@ from user_auth import (
     UserResponse,
     authenticate_user,
     create_access_token,
+    create_refresh_token,
     create_user,
     get_current_active_user,
     hash_password,
@@ -43,10 +45,13 @@ async def register(user_data: UserCreate):
     try:
         user = create_user(user_data)
         access_token = create_access_token(user)
+        refresh_token = create_refresh_token(user)
         return TokenResponse(
             access_token=access_token,
+            refresh_token=refresh_token["refresh_token"],
             token_type="bearer",
             expires_in=JWT_EXPIRATION_HOURS * 3600,
+            refresh_expires_in=REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 3600,
             user=build_user_response(user),
         )
     except HTTPException:
@@ -64,10 +69,13 @@ async def login(login_data: UserLogin):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         access_token = create_access_token(user)
+        refresh_token = create_refresh_token(user)
         return TokenResponse(
             access_token=access_token,
+            refresh_token=refresh_token["refresh_token"],
             token_type="bearer",
             expires_in=JWT_EXPIRATION_HOURS * 3600,
+            refresh_expires_in=REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 3600,
             user=build_user_response(user),
         )
     except HTTPException:
@@ -106,9 +114,35 @@ async def update_user_profile(
         raise HTTPException(status_code=500, detail=f"Update failed: {str(exc)}") from exc
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_access_token(payload: RefreshTokenRequest):
+    """Issue a new access token from a valid refresh token."""
+    try:
+        user = USER_REPOSITORY.verify_refresh_token(payload.refresh_token)
+        access_token = create_access_token(user)
+        refresh_token = create_refresh_token(user)
+        USER_REPOSITORY.revoke_refresh_token(payload.refresh_token)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token["refresh_token"],
+            token_type="bearer",
+            expires_in=JWT_EXPIRATION_HOURS * 3600,
+            refresh_expires_in=REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 3600,
+            user=build_user_response(user),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Refresh failed: {str(exc)}") from exc
 
 
 @router.put("/change-password")
@@ -139,9 +173,15 @@ async def change_password(
 
 
 @router.post("/logout")
-async def logout():
-    """Logout user (client-side token invalidation)."""
-    return {"message": "Logged out successfully"}
+async def logout(payload: Optional[RefreshTokenRequest] = None):
+    """Logout user. If refresh token is provided, revoke it."""
+    revoked = False
+    if payload and payload.refresh_token:
+        revoked = USER_REPOSITORY.revoke_refresh_token(payload.refresh_token)
+    return {
+        "message": "Logged out successfully",
+        "refresh_token_revoked": revoked,
+    }
 
 
 # Deprecated auth/account crossover endpoints kept temporarily for compatibility.

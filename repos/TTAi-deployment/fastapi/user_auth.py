@@ -4,8 +4,10 @@ Provides JWT-based authentication for end-users with SQLite persistence.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import secrets
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -23,6 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_AUTH_DB_PATH = BASE_DIR / "data" / "auth_dev.sqlite3"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
+REFRESH_TOKEN_EXPIRATION_DAYS = 30
 DEV_JWT_SECRET_FALLBACK = "ttai-user-auth-secret-key-change-in-production"
 security = HTTPBearer(auto_error=False)
 
@@ -65,8 +68,10 @@ class TokenResponse(BaseModel):
     """JWT token response"""
 
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    refresh_expires_in: int
     user: UserResponse
 
 
@@ -104,6 +109,22 @@ class UserRepository:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS refresh_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    revoked_at TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id)"
             )
             conn.commit()
 
@@ -234,6 +255,80 @@ class UserRepository:
             raise HTTPException(status_code=404, detail="User not found")
         return refreshed
 
+    def create_refresh_token(self, *, user_id: str) -> Dict[str, Any]:
+        self.init_db()
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        created_at = datetime.utcnow()
+        expires_at = created_at + timedelta(days=REFRESH_TOKEN_EXPIRATION_DAYS)
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO refresh_tokens (user_id, token_hash, created_at, expires_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    token_hash,
+                    created_at.isoformat(),
+                    expires_at.isoformat(),
+                    None,
+                ),
+            )
+            conn.commit()
+
+        return {
+            "refresh_token": raw_token,
+            "expires_in": REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 3600,
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def verify_refresh_token(self, refresh_token: str) -> Dict[str, Any]:
+        self.init_db()
+        token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM refresh_tokens
+                WHERE token_hash = ?
+                LIMIT 1
+                """,
+                (token_hash,),
+            ).fetchone()
+
+        if row is None:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+        if row["revoked_at"]:
+            raise HTTPException(status_code=401, detail="Refresh token revoked")
+
+        expires_at = datetime.fromisoformat(row["expires_at"])
+        if expires_at <= datetime.utcnow():
+            raise HTTPException(status_code=401, detail="Refresh token expired")
+
+        user = self.get_user_by_id(str(row["user_id"]))
+        if not user or not user["is_active"]:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        return user
+
+    def revoke_refresh_token(self, refresh_token: str) -> bool:
+        self.init_db()
+        token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        revoked_at = datetime.utcnow().isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE refresh_tokens
+                SET revoked_at = ?
+                WHERE token_hash = ? AND revoked_at IS NULL
+                """,
+                (revoked_at, token_hash),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
+
     def ensure_dev_seed_user(self) -> bool:
         self.init_db()
         environment = get_runtime_environment()
@@ -335,6 +430,7 @@ def create_access_token(user: Dict[str, Any]) -> str:
         "email": user["email"],
         "name": user["name"],
         "role": user["role"],
+        "type": "access",
         "exp": expire,
         "iat": datetime.utcnow(),
     }
@@ -343,10 +439,18 @@ def create_access_token(user: Dict[str, Any]) -> str:
     return token
 
 
+def create_refresh_token(user: Dict[str, Any]) -> Dict[str, Any]:
+    """Create persisted refresh token."""
+    return USER_REPOSITORY.create_refresh_token(user_id=str(user["id"]))
+
+
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify JWT token and return payload."""
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        token_type = payload.get("type")
+        if token_type and token_type != "access":
+            raise HTTPException(status_code=401, detail="Invalid access token")
         return payload
     except jwt.ExpiredSignatureError as exc:
         raise HTTPException(status_code=401, detail="Token expired") from exc
