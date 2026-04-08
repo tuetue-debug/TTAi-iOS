@@ -36,6 +36,8 @@ def build_user_response(user: Dict[str, Any]) -> UserResponse:
         updated_at=user["updated_at"],
         is_active=user["is_active"],
         role=user["role"],
+        email_verified=user.get("email_verified", False),
+        email_verified_at=user.get("email_verified_at"),
     )
 
 
@@ -122,6 +124,10 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
@@ -157,6 +163,39 @@ async def refresh_access_token(payload: RefreshTokenRequest):
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Refresh failed: {str(exc)}") from exc
+
+
+@router.post("/verify-email/request")
+async def request_email_verification(current_user: dict = Depends(get_current_active_user)):
+    """Issue an email verification token for the current user."""
+    try:
+        result = USER_REPOSITORY.create_email_verification_token(user_id=str(current_user["id"]))
+        return {
+            "message": "Email verification instructions have been prepared.",
+            "issued": True,
+            "verification_token": result.get("verification_token"),
+            "expires_in": result.get("expires_in"),
+            "expires_at": result.get("expires_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Email verification request failed: {str(exc)}") from exc
+
+
+@router.post("/verify-email")
+async def verify_email(payload: VerifyEmailRequest):
+    """Consume verification token and mark the email as verified."""
+    try:
+        user = USER_REPOSITORY.consume_email_verification_token(token=payload.token)
+        return {
+            "message": "Email verified successfully",
+            "user": build_user_response(user),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Email verification failed: {str(exc)}") from exc
 
 
 @router.post("/forgot-password")

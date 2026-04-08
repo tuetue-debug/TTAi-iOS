@@ -62,6 +62,8 @@ class UserResponse(BaseModel):
     updated_at: datetime
     is_active: bool
     role: str = "user"
+    email_verified: bool = False
+    email_verified_at: Optional[datetime] = None
 
 
 class TokenResponse(BaseModel):
@@ -103,7 +105,9 @@ class UserRepository:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     is_active INTEGER NOT NULL DEFAULT 1,
-                    role TEXT NOT NULL DEFAULT 'user'
+                    role TEXT NOT NULL DEFAULT 'user',
+                    email_verified INTEGER NOT NULL DEFAULT 0,
+                    email_verified_at TEXT
                 )
                 """
             )
@@ -143,6 +147,31 @@ class UserRepository:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id)"
             )
+            try:
+                conn.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE users ADD COLUMN email_verified_at TEXT")
+            except sqlite3.OperationalError:
+                pass
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT,
+                    revoked_at TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_id ON email_verification_tokens(user_id)"
+            )
             conn.commit()
 
         self._initialized = True
@@ -159,6 +188,8 @@ class UserRepository:
             "updated_at": datetime.fromisoformat(row["updated_at"]),
             "is_active": bool(row["is_active"]),
             "role": row["role"],
+            "email_verified": bool(row["email_verified"]) if "email_verified" in row.keys() else False,
+            "email_verified_at": datetime.fromisoformat(row["email_verified_at"]) if row["email_verified_at"] else None,
         }
 
     def create_user(self, user_data: UserCreate) -> Dict[str, Any]:
@@ -385,6 +416,80 @@ class UserRepository:
                 "is_active": row["revoked_at"] is None and expires_at > now,
             })
         return sessions
+
+    def create_email_verification_token(self, *, user_id: str) -> Dict[str, Any]:
+        self.init_db()
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        created_at = datetime.utcnow()
+        expires_at = created_at + timedelta(hours=24)
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO email_verification_tokens (user_id, token_hash, created_at, expires_at, used_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    token_hash,
+                    created_at.isoformat(),
+                    expires_at.isoformat(),
+                    None,
+                    None,
+                ),
+            )
+            conn.commit()
+
+        return {
+            "issued": True,
+            "email": user["email"],
+            "verification_token": raw_token,
+            "expires_in": 86400,
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def consume_email_verification_token(self, *, token: str) -> Dict[str, Any]:
+        self.init_db()
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM email_verification_tokens
+                WHERE token_hash = ?
+                LIMIT 1
+                """,
+                (token_hash,),
+            ).fetchone()
+
+            if row is None:
+                raise HTTPException(status_code=400, detail="Invalid verification token")
+            if row["revoked_at"] is not None or row["used_at"] is not None:
+                raise HTTPException(status_code=400, detail="Verification token is no longer valid")
+
+            expires_at = datetime.fromisoformat(row["expires_at"])
+            if expires_at <= datetime.utcnow():
+                raise HTTPException(status_code=400, detail="Verification token expired")
+
+            verified_at = datetime.utcnow().isoformat()
+            conn.execute(
+                "UPDATE users SET email_verified = 1, email_verified_at = ?, updated_at = ? WHERE id = ?",
+                (verified_at, verified_at, row["user_id"]),
+            )
+            conn.execute(
+                "UPDATE email_verification_tokens SET used_at = ? WHERE id = ?",
+                (verified_at, row["id"]),
+            )
+            conn.commit()
+
+        user = self.get_user_by_id(str(row["user_id"]))
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
 
     def create_password_reset_token(self, *, email: str) -> Dict[str, Any]:
         self.init_db()
