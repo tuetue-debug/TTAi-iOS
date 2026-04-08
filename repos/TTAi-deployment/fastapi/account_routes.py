@@ -59,12 +59,14 @@ async def get_account_usage_summary(
 ):
     """Return summarized usage for the authenticated user."""
     try:
-        events = read_usage_events(limit=limit)
+        scan_limit = max(limit * 10, 5000)
+        events = read_usage_events(limit=scan_limit)
         filtered = filter_usage_events(events, user_id=str(current_user["id"]))
         return {
             "user_id": str(current_user["id"]),
-            "summary": summarize_usage_events(filtered),
-            "count": len(filtered),
+            "summary": summarize_usage_events(filtered[:limit]),
+            "count": len(filtered[:limit]),
+            "scanned": scan_limit,
         }
     except HTTPException:
         raise
@@ -80,7 +82,8 @@ async def get_account_usage_events(
 ):
     """Return recent usage events for the authenticated user."""
     try:
-        events = read_usage_events(limit=max(limit * 5, 200))
+        scan_limit = max(limit * 20, 5000)
+        events = read_usage_events(limit=scan_limit)
         filtered = filter_usage_events(
             events,
             user_id=str(current_user["id"]),
@@ -95,6 +98,7 @@ async def get_account_usage_events(
                 "status": status,
                 "limit": limit,
             },
+            "scanned": scan_limit,
         }
     except HTTPException:
         raise

@@ -619,6 +619,7 @@ async def chat(
     request_id = str(uuid.uuid4())
     request_api_key_id = request.api_key_id or x_ttai_api_key_id
     request_tenant_id = request.tenant_id or x_ttai_tenant_id
+    resolved_user_id = request.user_id or "anonymous"
 
     api_key_identity = None
     x_api_key_value = http_request.headers.get("x-api-key")
@@ -629,8 +630,8 @@ async def chat(
             authorization=auth_header,
         )
         request_api_key_id = api_key_identity["api_key"].get("id")
-        if not request.user_id:
-            request.user_id = str(api_key_identity["user"].get("id"))
+        if resolved_user_id == "anonymous":
+            resolved_user_id = str(api_key_identity["user"].get("id"))
 
     fallback_used = False
     final_status = "success"
@@ -853,7 +854,7 @@ async def chat(
         processing_time = time.time() - start_time
         
         # Step 7: Track analytics
-        user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        user_id = resolved_user_id
         response_data = {
             "response": response_text,
             "processing_time": processing_time,
@@ -927,7 +928,7 @@ async def chat(
         final_http_status = e.status_code
         error_detail = str(e.detail)
         processing_time = time.time() - start_time
-        user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        user_id = resolved_user_id
         input_tokens_est = estimate_tokens(request.message)
         total_tokens_est = input_tokens_est
         event_model = provider.model if provider else None
@@ -975,7 +976,7 @@ async def chat(
         final_http_status = 500
         error_detail = str(e)
         processing_time = time.time() - start_time
-        user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        user_id = resolved_user_id
         input_tokens_est = estimate_tokens(request.message)
         total_tokens_est = input_tokens_est
         event_model = provider.model if provider else None
