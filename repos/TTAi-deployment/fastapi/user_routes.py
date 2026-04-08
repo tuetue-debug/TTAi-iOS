@@ -118,6 +118,11 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutRequest(BaseModel):
+    refresh_token: Optional[str] = None
+    all_sessions: bool = False
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
@@ -172,15 +177,35 @@ async def change_password(
         raise HTTPException(status_code=500, detail=f"Password change failed: {str(exc)}") from exc
 
 
+@router.get("/sessions")
+async def list_sessions(current_user: dict = Depends(get_current_active_user)):
+    """List refresh-token backed auth sessions for the current user."""
+    return {
+        "user_id": str(current_user["id"]),
+        "items": USER_REPOSITORY.list_active_refresh_sessions(user_id=str(current_user["id"])),
+    }
+
+
 @router.post("/logout")
-async def logout(payload: Optional[RefreshTokenRequest] = None):
-    """Logout user. If refresh token is provided, revoke it."""
+async def logout(
+    payload: Optional[LogoutRequest] = None,
+    current_user: dict = Depends(get_current_active_user),
+):
+    """Logout user. Supports current refresh token or all sessions revocation."""
     revoked = False
-    if payload and payload.refresh_token:
+    revoked_count = 0
+
+    if payload and payload.all_sessions:
+        revoked_count = USER_REPOSITORY.revoke_all_refresh_tokens_for_user(user_id=str(current_user["id"]))
+    elif payload and payload.refresh_token:
         revoked = USER_REPOSITORY.revoke_refresh_token(payload.refresh_token)
+        revoked_count = 1 if revoked else 0
+
     return {
         "message": "Logged out successfully",
         "refresh_token_revoked": revoked,
+        "revoked_sessions": revoked_count,
+        "all_sessions": bool(payload.all_sessions) if payload else False,
     }
 
 

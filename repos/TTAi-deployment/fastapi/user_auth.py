@@ -329,6 +329,46 @@ class UserRepository:
             conn.commit()
         return cursor.rowcount > 0
 
+    def revoke_all_refresh_tokens_for_user(self, *, user_id: str) -> int:
+        self.init_db()
+        revoked_at = datetime.utcnow().isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE refresh_tokens
+                SET revoked_at = ?
+                WHERE user_id = ? AND revoked_at IS NULL
+                """,
+                (revoked_at, user_id),
+            )
+            conn.commit()
+        return cursor.rowcount
+
+    def list_active_refresh_sessions(self, *, user_id: str) -> list[Dict[str, Any]]:
+        self.init_db()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, created_at, expires_at, revoked_at
+                FROM refresh_tokens
+                WHERE user_id = ?
+                ORDER BY id DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        sessions = []
+        now = datetime.utcnow()
+        for row in rows:
+            expires_at = datetime.fromisoformat(row["expires_at"])
+            sessions.append({
+                "id": f"session_{row['id']}",
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+                "revoked_at": row["revoked_at"],
+                "is_active": row["revoked_at"] is None and expires_at > now,
+            })
+        return sessions
+
     def ensure_dev_seed_user(self) -> bool:
         self.init_db()
         environment = get_runtime_environment()
