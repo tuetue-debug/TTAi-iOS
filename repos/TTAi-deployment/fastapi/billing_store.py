@@ -189,6 +189,7 @@ def summarize_billing_usage(events: List[Dict]) -> Dict:
     estimated_cost = 0.0
     tenant_costs = {}
     user_costs = {}
+    api_key_costs = {}
     provider_costs = {}
     model_costs = {}
     billable_mode_counts = {}
@@ -214,6 +215,10 @@ def summarize_billing_usage(events: List[Dict]) -> Dict:
         if user_id:
             user_costs[user_id] = user_costs.get(user_id, 0.0) + cost
 
+        api_key_id = e.get("api_key_id")
+        if api_key_id:
+            api_key_costs[api_key_id] = api_key_costs.get(api_key_id, 0.0) + cost
+
         provider = e.get("provider")
         if provider:
             provider_costs[provider] = provider_costs.get(provider, 0.0) + cost
@@ -231,6 +236,7 @@ def summarize_billing_usage(events: List[Dict]) -> Dict:
         "estimated_cost": round(estimated_cost, 8),
         "tenant_breakdown": sort_dict_by_value(tenant_costs),
         "user_breakdown": sort_dict_by_value(user_costs),
+        "api_key_breakdown": sort_dict_by_value(api_key_costs),
         "provider_breakdown": sort_dict_by_value(provider_costs),
         "model_breakdown": sort_dict_by_value(model_costs),
         "billable_mode_breakdown": sort_dict_by_value(billable_mode_counts),
