@@ -1,6 +1,7 @@
 // TTAi Control Dashboard JavaScript
 const API_BASE = '/api';
 const ADMIN_API_BASE = '/api/v1/admin';
+const CONTROL_API_BASE = '/control-api';
 const CONTROL_TOKEN = 'ttai-control-token'; // legacy control collector token
 const ADMIN_TOKEN = 'f6883d3eb388cff8fcad7d7952c568f6fd8995afa6f4581209215d582e2efe59'; // production admin token for dashboard MVP
 
@@ -83,33 +84,35 @@ function renderSummaryList(container, items) {
 
 async function loadAdminOverview() {
     try {
-        const [overviewRes, errorsRes, quotaRes] = await Promise.all([
-            fetch(`${ADMIN_API_BASE}/overview?usage_limit=50&recent_events_limit=5`, { headers: adminHeaders }),
-            fetch(`${ADMIN_API_BASE}/errors/summary?limit=50&top_n=5`, { headers: adminHeaders }),
-            fetch(`${ADMIN_API_BASE}/quota/blocked?limit=50&recent_limit=5`, { headers: adminHeaders })
+        const [overviewRes, errorsRes, quotaRes, billingRes] = await Promise.all([
+            fetch(`${CONTROL_API_BASE}/overview?usage_limit=50&recent_events_limit=5`, { headers: adminHeaders }),
+            fetch(`${CONTROL_API_BASE}/errors?limit=50&top_n=5`, { headers: adminHeaders }),
+            fetch(`${CONTROL_API_BASE}/quota?limit=50&recent_limit=5`, { headers: adminHeaders }),
+            fetch(`${CONTROL_API_BASE}/billing?limit=50`, { headers: adminHeaders })
         ]);
 
-        if (!overviewRes.ok || !errorsRes.ok || !quotaRes.ok) {
-            throw new Error('Failed to load admin dashboard data');
+        if (!overviewRes.ok || !errorsRes.ok || !quotaRes.ok || !billingRes.ok) {
+            throw new Error('Failed to load control dashboard data');
         }
 
         const overview = await overviewRes.json();
         const errors = await errorsRes.json();
         const quota = await quotaRes.json();
+        const billing = await billingRes.json();
 
         if (overviewSummaryEl) {
             const metrics = overviewSummaryEl.querySelectorAll('.metric-value');
-            metrics[0].textContent = overview.health?.summary?.status || '--';
-            metrics[1].textContent = overview.usage?.window_event_count ?? '--';
-            metrics[2].textContent = overview.billing?.summary?.billable_estimated_cost ?? '--';
-            metrics[3].textContent = overview.quota?.blocked_event_count ?? '--';
+            metrics[0].textContent = overview.health?.summary?.status || overview.health?.summary?.overall_status || '--';
+            metrics[1].textContent = overview.usage?.window_event_count ?? overview.usage?.count ?? '--';
+            metrics[2].textContent = billing.summary?.estimated_cost ?? overview.billing?.summary?.estimated_cost ?? '--';
+            metrics[3].textContent = overview.quota?.blocked_event_count ?? quota.blocked_event_count ?? '--';
         }
 
         renderSummaryList(billingSummaryEl, [
-            { label: 'Total Estimated Cost', value: overview.billing?.summary?.total_estimated_cost ?? '--' },
-            { label: 'Billable Estimated Cost', value: overview.billing?.summary?.billable_estimated_cost ?? '--' },
-            { label: 'Billable Events', value: overview.billing?.summary?.billable_events ?? '--' },
-            { label: 'Top Provider', value: Object.keys(overview.billing?.summary?.provider_breakdown || {})[0] || '--' }
+            { label: 'Estimated Cost', value: billing.summary?.estimated_cost ?? overview.billing?.summary?.estimated_cost ?? '--' },
+            { label: 'Billable Events', value: billing.summary?.billable_events ?? overview.billing?.summary?.billable_events ?? '--' },
+            { label: 'Top Provider', value: Object.keys(billing.provider_breakdown || overview.billing?.summary?.provider_breakdown || {})[0] || '--' },
+            { label: 'Top API Key', value: Object.keys(billing.api_key_breakdown || overview.billing?.summary?.api_key_breakdown || {})[0] || '--' }
         ]);
 
         renderSummaryList(quotaBlockedSummaryEl, [
@@ -127,7 +130,7 @@ async function loadAdminOverview() {
         ]);
     } catch (error) {
         console.error('Error loading admin overview:', error);
-        renderSummaryList(billingSummaryEl, [{ label: 'Admin overview failed', value: 'Error' }]);
+        renderSummaryList(billingSummaryEl, [{ label: 'Control overview failed', value: 'Error' }]);
         renderSummaryList(quotaBlockedSummaryEl, [{ label: 'Quota summary failed', value: 'Error' }]);
         renderSummaryList(errorSummaryEl, [{ label: 'Error summary failed', value: 'Error' }]);
     }
