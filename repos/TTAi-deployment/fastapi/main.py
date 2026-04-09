@@ -1689,9 +1689,11 @@ async def control_overview(
     recent_events_limit: int = Query(default=20, ge=1, le=100),
     current_user = Depends(get_current_control_user),
 ):
-    recent_events = read_usage_events(limit=usage_limit)
-    usage_summary = summarize_usage_events(recent_events)
-    billing_summary = summarize_billing_usage(recent_events)
+    usage_result = USAGE_TRUTH.usage_summary(limit=usage_limit)
+    billing_result = USAGE_TRUTH.billing_summary(limit=usage_limit)
+    recent_events = usage_result.get("items", [])
+    usage_summary = usage_result.get("summary", {})
+    billing_summary = billing_result.get("summary", {})
     health_summary = await health()
     detailed_health = await health_detailed()
 
@@ -1725,11 +1727,19 @@ async def control_overview(
         },
         "usage": {
             "summary": usage_summary,
+            "count": usage_result.get("count", 0),
+            "matched": usage_result.get("matched", 0),
+            "scanned": usage_result.get("scanned", 0),
+            "filters": usage_result.get("filters", {}),
             "recent_events": recent_events[:recent_events_limit],
             "window_event_count": len(recent_events),
         },
         "billing": {
             "summary": billing_summary,
+            "count": billing_result.get("count", 0),
+            "matched": billing_result.get("matched", 0),
+            "scanned": billing_result.get("scanned", 0),
+            "filters": billing_result.get("filters", {}),
         },
         "quota": {
             "blocked_event_count": len(blocked_events),
