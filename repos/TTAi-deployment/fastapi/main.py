@@ -25,6 +25,7 @@ from user_routes import router as user_auth_router
 from account_routes import router as account_router
 from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
 from billing_store import load_billing_config, check_quota_allowance, summarize_billing_usage
+from usage_truth import USAGE_TRUTH
 from api_key_auth import get_api_key_identity
 
 # Configure logging
@@ -1037,9 +1038,8 @@ async def admin_usage_events(
     billing_billable: Optional[bool] = None,
     billable_mode: Optional[str] = None,
 ):
-    events = read_usage_events(limit=1000)
-    filtered = filter_usage_events(
-        events,
+    result = USAGE_TRUTH.query_events(
+        limit=limit,
         user_id=user_id,
         status=status,
         provider=provider,
@@ -1052,20 +1052,11 @@ async def admin_usage_events(
         billable_mode=billable_mode,
     )
     return {
-        "count": min(len(filtered), limit),
-        "filters": {
-            "user_id": user_id,
-            "status": status,
-            "provider": provider,
-            "model": model,
-            "request_path": request_path,
-            "tenant_id": tenant_id,
-            "api_key_id": api_key_id,
-            "quota_billable": quota_billable,
-            "billing_billable": billing_billable,
-            "billable_mode": billable_mode,
-        },
-        "events": filtered[:limit],
+        "count": result["count"],
+        "matched": result["matched"],
+        "scanned": result["scanned"],
+        "filters": result["filters"],
+        "events": result["items"],
     }
 
 
@@ -1084,9 +1075,8 @@ async def admin_usage_summary(
     billing_billable: Optional[bool] = None,
     billable_mode: Optional[str] = None,
 ):
-    events = read_usage_events(limit=limit)
-    filtered = filter_usage_events(
-        events,
+    result = USAGE_TRUTH.usage_summary(
+        limit=limit,
         user_id=user_id,
         status=status,
         provider=provider,
@@ -1099,19 +1089,11 @@ async def admin_usage_summary(
         billable_mode=billable_mode,
     )
     return {
-        "filters": {
-            "user_id": user_id,
-            "status": status,
-            "provider": provider,
-            "model": model,
-            "request_path": request_path,
-            "tenant_id": tenant_id,
-            "api_key_id": api_key_id,
-            "quota_billable": quota_billable,
-            "billing_billable": billing_billable,
-            "billable_mode": billable_mode,
-        },
-        "summary": summarize_usage_events(filtered),
+        "filters": result["filters"],
+        "summary": result["summary"],
+        "count": result["count"],
+        "matched": result["matched"],
+        "scanned": result["scanned"],
     }
 
 
@@ -1130,9 +1112,8 @@ async def admin_usage_by_user(
     billing_billable: Optional[bool] = None,
     billable_mode: Optional[str] = None,
 ):
-    events = read_usage_events(limit=1000)
-    filtered = filter_usage_events(
-        events,
+    result = USAGE_TRUTH.usage_summary(
+        limit=limit,
         user_id=target_user_id,
         status=status,
         provider=provider,
@@ -1146,20 +1127,12 @@ async def admin_usage_by_user(
     )
     return {
         "user_id": target_user_id,
-        "count": min(len(filtered), limit),
-        "filters": {
-            "status": status,
-            "provider": provider,
-            "model": model,
-            "request_path": request_path,
-            "tenant_id": tenant_id,
-            "api_key_id": api_key_id,
-            "quota_billable": quota_billable,
-            "billing_billable": billing_billable,
-            "billable_mode": billable_mode,
-        },
-        "summary": summarize_usage_events(filtered),
-        "events": filtered[:limit],
+        "count": result["count"],
+        "matched": result["matched"],
+        "scanned": result["scanned"],
+        "filters": result["filters"],
+        "summary": result["summary"],
+        "events": result["items"],
     }
 
 # Query Classification endpoints
@@ -1490,20 +1463,11 @@ async def admin_quota_status(
     api_key_id: Optional[str] = None,
     current_user = Depends(get_current_admin_user),
 ):
-    effective_user_id = user_id or "anonymous"
-    quota_status = check_quota_allowance(
-        user_id=effective_user_id,
-        api_key_id=api_key_id,
+    return USAGE_TRUTH.quota_status(
+        user_id=user_id,
         tenant_id=tenant_id,
+        api_key_id=api_key_id,
     )
-    return {
-        "scope": {
-            "user_id": user_id,
-            "tenant_id": tenant_id,
-            "api_key_id": api_key_id,
-        },
-        "quota_status": quota_status,
-    }
 
 @app.get("/api/admin/quota/status/users/{target_user_id}")
 @app.get(API_V1_ADMIN_QUOTA_STATUS_USER)
@@ -1513,19 +1477,11 @@ async def admin_quota_status_by_user(
     api_key_id: Optional[str] = None,
     current_user = Depends(get_current_admin_user),
 ):
-    quota_status = check_quota_allowance(
+    return USAGE_TRUTH.quota_status(
         user_id=target_user_id,
-        api_key_id=api_key_id,
         tenant_id=tenant_id,
+        api_key_id=api_key_id,
     )
-    return {
-        "scope": {
-            "user_id": target_user_id,
-            "tenant_id": tenant_id,
-            "api_key_id": api_key_id,
-        },
-        "quota_status": quota_status,
-    }
 
 # Billing summary endpoint
 @app.get("/api/admin/usage/billing-summary")
@@ -1544,9 +1500,8 @@ async def admin_billing_summary(
     billable_mode: Optional[str] = None,
     current_user = Depends(get_current_admin_user),
 ):
-    events = read_usage_events(limit=limit)
-    filtered = filter_usage_events(
-        events,
+    result = USAGE_TRUTH.billing_summary(
+        limit=limit,
         user_id=user_id,
         status=status,
         provider=provider,
@@ -1559,19 +1514,11 @@ async def admin_billing_summary(
         billable_mode=billable_mode,
     )
     return {
-        "filters": {
-            "user_id": user_id,
-            "status": status,
-            "provider": provider,
-            "model": model,
-            "request_path": request_path,
-            "tenant_id": tenant_id,
-            "api_key_id": api_key_id,
-            "quota_billable": quota_billable,
-            "billing_billable": billing_billable,
-            "billable_mode": billable_mode,
-        },
-        "summary": summarize_billing_usage(filtered),
+        "filters": result["filters"],
+        "summary": result["summary"],
+        "count": result["count"],
+        "matched": result["matched"],
+        "scanned": result["scanned"],
     }
 
 @app.get(API_V1_ADMIN_OVERVIEW)

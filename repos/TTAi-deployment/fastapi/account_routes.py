@@ -10,8 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 from user_auth import get_current_active_user
 from user_routes import build_user_response
 from user_auth import USER_REPOSITORY
-from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
-from billing_store import summarize_billing_usage, check_quota_allowance
+from usage_truth import USAGE_TRUTH
 from api_key_store import API_KEY_REPOSITORY
 
 router = APIRouter(prefix="/api/v1/account", tags=["account"])
@@ -59,14 +58,16 @@ async def get_account_usage_summary(
 ):
     """Return summarized usage for the authenticated user."""
     try:
-        scan_limit = max(limit * 10, 5000)
-        events = read_usage_events(limit=scan_limit)
-        filtered = filter_usage_events(events, user_id=str(current_user["id"]))
+        result = USAGE_TRUTH.usage_summary(
+            limit=limit,
+            user_id=str(current_user["id"]),
+        )
         return {
             "user_id": str(current_user["id"]),
-            "summary": summarize_usage_events(filtered[:limit]),
-            "count": len(filtered[:limit]),
-            "scanned": scan_limit,
+            "summary": result["summary"],
+            "count": result["count"],
+            "matched": result["matched"],
+            "scanned": result["scanned"],
         }
     except HTTPException:
         raise
@@ -82,23 +83,21 @@ async def get_account_usage_events(
 ):
     """Return recent usage events for the authenticated user."""
     try:
-        scan_limit = max(limit * 20, 5000)
-        events = read_usage_events(limit=scan_limit)
-        filtered = filter_usage_events(
-            events,
+        result = USAGE_TRUTH.query_events(
+            limit=limit,
             user_id=str(current_user["id"]),
             status=status,
         )
-        filtered = filtered[:limit]
         return {
             "user_id": str(current_user["id"]),
-            "items": filtered,
-            "count": len(filtered),
+            "items": result["items"],
+            "count": result["count"],
+            "matched": result["matched"],
             "filters": {
-                "status": status,
+                **result["filters"],
                 "limit": limit,
             },
-            "scanned": scan_limit,
+            "scanned": result["scanned"],
         }
     except HTTPException:
         raise
@@ -113,12 +112,16 @@ async def get_account_billing_summary(
 ):
     """Return billing summary for the authenticated user."""
     try:
-        events = read_usage_events(limit=limit)
-        filtered = filter_usage_events(events, user_id=str(current_user["id"]))
+        result = USAGE_TRUTH.billing_summary(
+            limit=limit,
+            user_id=str(current_user["id"]),
+        )
         return {
             "user_id": str(current_user["id"]),
-            "summary": summarize_billing_usage(filtered),
-            "count": len(filtered),
+            "summary": result["summary"],
+            "count": result["count"],
+            "matched": result["matched"],
+            "scanned": result["scanned"],
         }
     except HTTPException:
         raise
@@ -132,10 +135,11 @@ async def get_account_billing_limits(
 ):
     """Return quota/limit state for the authenticated user."""
     try:
-        quota_status = check_quota_allowance(user_id=str(current_user["id"]))
+        result = USAGE_TRUTH.quota_status(user_id=str(current_user["id"]))
         return {
             "user_id": str(current_user["id"]),
-            "quota_status": quota_status,
+            "quota_status": result["quota_status"],
+            "scope": result["scope"],
         }
     except HTTPException:
         raise
