@@ -1824,7 +1824,8 @@ async def control_errors(
     top_n: int = Query(default=10, ge=1, le=50),
     current_user = Depends(get_current_control_user),
 ):
-    events = read_usage_events(limit=limit)
+    result = USAGE_TRUTH.query_events(limit=limit)
+    events = result.get("items", [])
     error_events = [event for event in events if event.get("status") not in (None, "success")]
     status_counts = Counter(event.get("status") or "unknown" for event in error_events)
     http_status_counts = Counter(str(event.get("http_status") or "unknown") for event in error_events)
@@ -1835,6 +1836,10 @@ async def control_errors(
         for event in error_events
     )
     return {
+        "count": result.get("count", 0),
+        "matched": result.get("matched", 0),
+        "scanned": result.get("scanned", 0),
+        "filters": result.get("filters", {}),
         "window_event_count": len(events),
         "error_event_count": len(error_events),
         "status_breakdown": dict(status_counts.most_common(top_n)),
