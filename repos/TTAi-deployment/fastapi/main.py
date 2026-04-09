@@ -649,7 +649,7 @@ async def chat(
                    f"(confidence: {classification.confidence:.2f})")
 
         # Step 1.5: Quota enforcement
-        user_id = request.user_id if hasattr(request, 'user_id') else 'anonymous'
+        user_id = resolved_user_id
         quota_check = check_quota_allowance(
             user_id=user_id,
             api_key_id=request_api_key_id,
@@ -922,7 +922,7 @@ async def chat(
         )
         
     except HTTPException as e:
-        if final_status == "quota_exceeded":
+        if final_status == "quota_exceeded" or e.status_code == 429:
             raise
         final_status = "error"
         final_http_status = e.status_code
