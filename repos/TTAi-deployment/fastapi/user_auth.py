@@ -116,6 +116,24 @@ class UserRepository:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS oauth_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    provider TEXT NOT NULL,
+                    provider_user_id TEXT NOT NULL,
+                    provider_email TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(provider, provider_user_id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id ON oauth_accounts(user_id)"
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS refresh_tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -280,6 +298,69 @@ class UserRepository:
         if not refreshed:
             raise HTTPException(status_code=404, detail="User not found")
         return refreshed
+
+    def list_oauth_accounts(self, *, user_id: str) -> list[Dict[str, Any]]:
+        self.init_db()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT provider, provider_user_id, provider_email, created_at, updated_at
+                FROM oauth_accounts
+                WHERE user_id = ?
+                ORDER BY provider ASC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [
+            {
+                "provider": row["provider"],
+                "provider_user_id": row["provider_user_id"],
+                "provider_email": row["provider_email"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+
+    def link_oauth_account(
+        self,
+        *,
+        user_id: str,
+        provider: str,
+        provider_user_id: str,
+        provider_email: str | None = None,
+    ) -> Dict[str, Any]:
+        self.init_db()
+        now = datetime.utcnow().isoformat()
+        provider_value = provider.strip().lower()
+        try:
+            with self._connect() as conn:
+                existing = conn.execute(
+                    "SELECT user_id FROM oauth_accounts WHERE provider = ? AND provider_user_id = ? LIMIT 1",
+                    (provider_value, provider_user_id),
+                ).fetchone()
+                if existing and str(existing["user_id"]) != str(user_id):
+                    raise HTTPException(status_code=400, detail="OAuth account already linked to another user")
+
+                conn.execute(
+                    """
+                    INSERT INTO oauth_accounts (user_id, provider, provider_user_id, provider_email, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(provider, provider_user_id)
+                    DO UPDATE SET provider_email = excluded.provider_email, updated_at = excluded.updated_at
+                    """,
+                    (user_id, provider_value, provider_user_id, provider_email, now, now),
+                )
+                conn.commit()
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(status_code=400, detail="OAuth account link failed") from exc
+
+        return {
+            "provider": provider_value,
+            "provider_user_id": provider_user_id,
+            "provider_email": provider_email,
+            "updated_at": now,
+        }
 
     def update_password(self, *, user_id: str, password_hash: str) -> Dict[str, Any]:
         self.init_db()

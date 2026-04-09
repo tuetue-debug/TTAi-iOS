@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, Header, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import os
 import httpx
@@ -21,6 +21,7 @@ from query_classifier import query_classifier, ClassificationResult
 from model_manager import model_manager, startup_warmup, shutdown_cleanup
 from analytics import analytics_tracker
 from auth import get_current_admin_user, get_current_control_user, validate_admin_token, CONTROL_SESSION_COOKIE, should_use_secure_cookie
+from user_auth import UserCreate, UserLogin, authenticate_user, create_user as create_portal_user, create_access_token, create_refresh_token, verify_token, USER_REPOSITORY
 from user_routes import router as user_auth_router
 from account_routes import router as account_router
 from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
@@ -219,6 +220,18 @@ if CONTROL_FRONTEND_PATH.exists():
 else:
     logger.warning(f"Control frontend directory not found: {CONTROL_FRONTEND_PATH}")
 
+# Mount API Portal Preview
+API_PORTAL_DIST_PATH = BASE_DIR / "portal" / "dist"
+API_PORTAL_ASSETS_PATH = API_PORTAL_DIST_PATH / "assets"
+API_PORTAL_FAVICON_PATH = API_PORTAL_DIST_PATH / "favicon.svg"
+if API_PORTAL_DIST_PATH.exists():
+    app.mount("/portal", StaticFiles(directory=str(API_PORTAL_DIST_PATH), html=True), name="api-portal")
+    if API_PORTAL_ASSETS_PATH.exists():
+        app.mount("/assets", StaticFiles(directory=str(API_PORTAL_ASSETS_PATH)), name="api-portal-assets")
+    logger.info(f"Mounted API portal preview at /portal from {API_PORTAL_DIST_PATH}")
+else:
+    logger.warning(f"API portal dist directory not found: {API_PORTAL_DIST_PATH}")
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -278,6 +291,37 @@ CONTROL_LOGIN_HTML = """
 </html>
 """
 
+PORTAL_SESSION_COOKIE = "ttai_portal_session"
+PORTAL_REFRESH_COOKIE = "ttai_portal_refresh"
+
+
+def build_portal_user_response(user: Dict) -> Dict:
+    return {
+        "id": user["id"],
+        "name": user["name"],
+        "email": user["email"],
+        "created_at": user["created_at"].isoformat() if hasattr(user.get("created_at"), "isoformat") else user.get("created_at"),
+        "updated_at": user["updated_at"].isoformat() if hasattr(user.get("updated_at"), "isoformat") else user.get("updated_at"),
+        "is_active": user.get("is_active", True),
+        "role": user.get("role", "user"),
+        "email_verified": user.get("email_verified", False),
+        "email_verified_at": user["email_verified_at"].isoformat() if user.get("email_verified_at") and hasattr(user.get("email_verified_at"), "isoformat") else user.get("email_verified_at"),
+    }
+
+
+def resolve_portal_user(portal_session: str | None) -> Dict:
+    if not portal_session:
+        raise HTTPException(status_code=401, detail="Portal session required")
+    try:
+        payload = verify_token(portal_session)
+        user = USER_REPOSITORY.get_user_by_id(str(payload.get("sub")))
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid portal session") from exc
+    if not user or not user.get("is_active"):
+        raise HTTPException(status_code=401, detail="Invalid portal user")
+    return user
+
+
 class ControlLoginRequest(BaseModel):
     token: str
 
@@ -286,6 +330,17 @@ class ControlActionRequest(BaseModel):
     action: str
     target: Optional[str] = None
     timeout: int = 30
+
+
+class PortalSignupRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class PortalLoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 def clear_learn_queue_file() -> Dict:
@@ -441,6 +496,210 @@ async def control_auth_session(current_user = Depends(get_current_control_user))
         },
     }
 
+
+@app.post("/auth/signup")
+async def portal_auth_signup(payload: PortalSignupRequest, response: Response):
+    user = create_portal_user(UserCreate(name=payload.name, email=payload.email, password=payload.password))
+    access_token = create_access_token(user)
+    refresh_token = create_refresh_token(user)
+    response.set_cookie(
+        key=PORTAL_SESSION_COOKIE,
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=should_use_secure_cookie(),
+        max_age=60 * 60 * 24,
+        path="/",
+    )
+    response.set_cookie(
+        key=PORTAL_REFRESH_COOKIE,
+        value=refresh_token["refresh_token"],
+        httponly=True,
+        samesite="lax",
+        secure=should_use_secure_cookie(),
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+    )
+    return {"ok": True, "user": build_portal_user_response(user)}
+
+
+@app.post("/auth/login")
+async def portal_auth_login(payload: PortalLoginRequest, response: Response):
+    user = authenticate_user(payload.email, payload.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    access_token = create_access_token(user)
+    refresh_token = create_refresh_token(user)
+    response.set_cookie(
+        key=PORTAL_SESSION_COOKIE,
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=should_use_secure_cookie(),
+        max_age=60 * 60 * 24,
+        path="/",
+    )
+    response.set_cookie(
+        key=PORTAL_REFRESH_COOKIE,
+        value=refresh_token["refresh_token"],
+        httponly=True,
+        samesite="lax",
+        secure=should_use_secure_cookie(),
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+    )
+    return {"ok": True, "user": build_portal_user_response(user)}
+
+
+@app.post("/auth/logout")
+async def portal_auth_logout(response: Response, portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE), portal_refresh: str | None = Cookie(default=None, alias=PORTAL_REFRESH_COOKIE)):
+    if portal_refresh:
+        try:
+            USER_REPOSITORY.revoke_refresh_token(portal_refresh)
+        except Exception:
+            pass
+    response.delete_cookie(PORTAL_SESSION_COOKIE, path="/")
+    response.delete_cookie(PORTAL_REFRESH_COOKIE, path="/")
+    return {"ok": True}
+
+
+@app.get("/auth/me")
+async def portal_auth_me(portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    return {"ok": True, "user": build_portal_user_response(user)}
+
+
+@app.get("/portal-api/overview")
+async def portal_account_overview(portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    user_id = str(user["id"])
+    usage = USAGE_TRUTH.usage_summary(limit=500, user_id=user_id)
+    billing = USAGE_TRUTH.billing_summary(limit=500, user_id=user_id)
+    limits = USAGE_TRUTH.quota_status(user_id=user_id)
+    api_keys = []
+    try:
+        from api_key_store import API_KEY_REPOSITORY
+        api_keys = API_KEY_REPOSITORY.list_user_api_keys(user_id)
+    except Exception:
+        api_keys = []
+    return {
+        "ok": True,
+        "user": build_portal_user_response(user),
+        "usage": usage,
+        "billing": billing,
+        "limits": limits,
+        "api_keys": {
+            "items": api_keys,
+            "count": len(api_keys),
+        },
+    }
+
+
+class PortalCreateApiKeyRequest(BaseModel):
+    name: str
+    scopes: List[str] = []
+
+
+@app.get("/portal-api/api-keys")
+async def portal_list_api_keys(portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    from api_key_store import API_KEY_REPOSITORY
+    items = API_KEY_REPOSITORY.list_user_api_keys(str(user["id"]))
+    return {"ok": True, "items": items, "count": len(items)}
+
+
+@app.post("/portal-api/api-keys")
+async def portal_create_api_key(payload: PortalCreateApiKeyRequest, portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    from api_key_store import API_KEY_REPOSITORY
+    created = API_KEY_REPOSITORY.create_api_key(user_id=str(user["id"]), name=payload.name, scopes=payload.scopes)
+    return {"ok": True, "item": created}
+
+
+@app.delete("/portal-api/api-keys/{key_id}")
+async def portal_revoke_api_key(key_id: str, portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    from api_key_store import API_KEY_REPOSITORY
+    revoked = API_KEY_REPOSITORY.revoke_api_key(user_id=str(user["id"]), api_key_id=key_id)
+    return {"ok": True, "item": revoked}
+
+
+@app.get("/portal-api/docs")
+async def portal_docs_payload(portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    return {
+        "ok": True,
+        "user": build_portal_user_response(user),
+        "base_url": "https://api.tuetue.vn",
+        "quickstart": {
+            "curl": "curl -X POST https://api.tuetue.vn/chat -H 'Authorization: Bearer sk-ttai-...' -H 'Content-Type: application/json' -d '{\"message\":\"Hello from TTAi\"}'",
+            "javascript": "const res = await fetch('https://api.tuetue.vn/chat', { method: 'POST', headers: { 'Authorization': 'Bearer sk-ttai-...', 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Hello from TTAi' }) });",
+            "python": "import requests\nrequests.post('https://api.tuetue.vn/chat', headers={'Authorization': 'Bearer sk-ttai-...'}, json={'message': 'Hello from TTAi'})",
+        },
+        "endpoints": [
+            {"name": "Chat", "method": "POST", "path": "/chat", "description": "Primary chat/completion endpoint for TTAi API consumers."},
+            {"name": "Auth Me", "method": "GET", "path": "/auth/me", "description": "Returns current portal user session."},
+            {"name": "List API Keys", "method": "GET", "path": "/portal-api/api-keys", "description": "List API keys for the authenticated portal user."},
+            {"name": "Create API Key", "method": "POST", "path": "/portal-api/api-keys", "description": "Create a new user-scoped API key."},
+            {"name": "Usage Summary", "method": "GET", "path": "/api/v1/account/usage/summary", "description": "Read usage summary for the authenticated account."},
+        ],
+    }
+
+
+class PortalProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+@app.get("/portal-api/profile")
+async def portal_profile_get(portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    return {"ok": True, "user": build_portal_user_response(user)}
+
+
+@app.put("/portal-api/profile")
+async def portal_profile_update(payload: PortalProfileUpdateRequest, portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    updated_user = USER_REPOSITORY.update_user_profile(user_id=str(user["id"]), name=payload.name, email=payload.email)
+    return {"ok": True, "user": build_portal_user_response(updated_user)}
+
+
+@app.get("/portal-api/social-auth/providers")
+async def portal_social_auth_providers(portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    linked = {item["provider"]: item for item in USER_REPOSITORY.list_oauth_accounts(user_id=str(user["id"]))}
+    providers = []
+    for provider in ["google", "github", "apple"]:
+        providers.append({
+            "provider": provider,
+            "enabled": False,
+            "status": "linked" if provider in linked else "available",
+            "linked_email": linked.get(provider, {}).get("provider_email"),
+            "message": "OAuth callback wiring not configured yet" if provider not in linked else "Provider linked in local auth store",
+        })
+    return {"ok": True, "items": providers}
+
+
+class PortalSocialLinkRequest(BaseModel):
+    provider: str
+    provider_user_id: str
+    provider_email: Optional[str] = None
+
+
+@app.post("/portal-api/social-auth/link")
+async def portal_social_auth_link(payload: PortalSocialLinkRequest, portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
+    user = resolve_portal_user(portal_session)
+    provider = (payload.provider or "").strip().lower()
+    if provider not in {"google", "github", "apple"}:
+        raise HTTPException(status_code=400, detail="Unsupported provider")
+    linked = USER_REPOSITORY.link_oauth_account(
+        user_id=str(user["id"]),
+        provider=provider,
+        provider_user_id=payload.provider_user_id,
+        provider_email=payload.provider_email,
+    )
+    return {"ok": True, "item": linked}
+
 # Models
 class ChatRequest(BaseModel):
     message: str
@@ -541,7 +800,10 @@ API_V1_ADMIN_QUOTA_STATUS_USER = "/api/v1/admin/quota/status/users/{target_user_
 
 # Health check
 @app.get("/")
-async def root():
+async def root(request: Request):
+    host = (request.headers.get("host") or "").split(":", 1)[0].lower()
+    if host == "console.tuetue.vn" and API_PORTAL_DIST_PATH.exists():
+        return FileResponse(API_PORTAL_DIST_PATH / "index.html")
     return {
         "status": "ok", 
         "service": "TTAi Super Model Hybrid API", 
@@ -554,6 +816,14 @@ async def root():
             "CLI Proxy Fallback"
         ]
     }
+
+@app.get("/favicon.svg", include_in_schema=False)
+async def portal_favicon(request: Request):
+    host = (request.headers.get("host") or "").split(":", 1)[0].lower()
+    if host == "console.tuetue.vn" and API_PORTAL_FAVICON_PATH.exists():
+        return FileResponse(API_PORTAL_FAVICON_PATH)
+    raise HTTPException(status_code=404, detail="Not found")
+
 
 @app.get("/health")
 @app.get(API_V1_SYSTEM_HEALTH)
