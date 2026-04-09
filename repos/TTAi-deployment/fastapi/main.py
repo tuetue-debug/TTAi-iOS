@@ -1758,12 +1758,17 @@ async def control_quota(
     recent_limit: int = Query(default=20, ge=1, le=100),
     current_user = Depends(get_current_control_user),
 ):
-    events = read_usage_events(limit=limit)
+    result = USAGE_TRUTH.query_events(limit=limit)
+    events = result.get("items", [])
     blocked_events = [
         event for event in events
         if event.get("status") == "quota_exceeded" or event.get("http_status") == 429
     ]
     return {
+        "count": result.get("count", 0),
+        "matched": result.get("matched", 0),
+        "scanned": result.get("scanned", 0),
+        "filters": result.get("filters", {}),
         "window_event_count": len(events),
         "blocked_event_count": len(blocked_events),
         "tenant_breakdown": dict(Counter(event.get("tenant_id") or "unknown" for event in blocked_events).most_common(20)),
@@ -1787,13 +1792,19 @@ async def control_quota(
 
 @app.get("/control-api/billing")
 async def control_billing(limit: int = Query(default=200, ge=1, le=5000), current_user = Depends(get_current_control_user)):
-    events = read_usage_events(limit=limit)
-    summary = summarize_billing_usage(events)
+    result = USAGE_TRUTH.billing_summary(limit=limit)
+    summary = result.get("summary", {})
     return {
+        "count": result.get("count", 0),
+        "matched": result.get("matched", 0),
+        "scanned": result.get("scanned", 0),
+        "filters": result.get("filters", {}),
         "summary": summary,
         "tenant_breakdown": summary.get("tenant_breakdown", {}),
+        "user_breakdown": summary.get("user_breakdown", {}),
         "api_key_breakdown": summary.get("api_key_breakdown", {}),
         "provider_breakdown": summary.get("provider_breakdown", {}),
+        "model_breakdown": summary.get("model_breakdown", {}),
         "billable_mode_breakdown": summary.get("billable_mode_breakdown", {}),
     }
 
@@ -1975,11 +1986,11 @@ async def control_topology(current_user = Depends(get_current_control_user)):
 
 @app.get("/control-api/usage")
 async def control_usage(limit: int = Query(default=20, ge=5, le=100), current_user = Depends(get_current_control_user)):
-    summary_response = await admin_usage_summary(limit=500)
-    events_response = await admin_usage_events(limit=200)
+    summary_result = USAGE_TRUTH.usage_summary(limit=500)
+    events_result = USAGE_TRUTH.query_events(limit=200)
 
-    summary = summary_response.get("summary", {}) if isinstance(summary_response, dict) else {}
-    raw_events = events_response.get("events", []) if isinstance(events_response, dict) else []
+    summary = summary_result.get("summary", {}) if isinstance(summary_result, dict) else {}
+    raw_events = events_result.get("items", []) if isinstance(events_result, dict) else []
     events = [normalize_usage_event(event) for event in raw_events]
 
     deduped_events = []
@@ -2031,6 +2042,10 @@ async def control_usage(limit: int = Query(default=20, ge=5, le=100), current_us
 
     return {
         "summary": summary,
+        "count": events_result.get("count", 0) if isinstance(events_result, dict) else 0,
+        "matched": events_result.get("matched", 0) if isinstance(events_result, dict) else 0,
+        "scanned": events_result.get("scanned", 0) if isinstance(events_result, dict) else 0,
+        "filters": events_result.get("filters", {}) if isinstance(events_result, dict) else {},
         "highlights": {
             "total_events": summary.get("total_events", 0),
             "deduped_events": deduped_total,
