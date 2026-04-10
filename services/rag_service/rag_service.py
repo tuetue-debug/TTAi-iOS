@@ -35,13 +35,22 @@ app.add_middleware(
 KNOWLEDGE_DIR = Path(RAG_KB_PATH)
 KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 legacy_engine = RAGEngine(persist_directory=str(KNOWLEDGE_DIR))
-rag_v2_shadow_backend = RAGV2ShadowBackend(WORKSPACE_ROOT)
 adapter = CompatibilityAdapter()
+_backend_boot_error = None
+
+try:
+    rag_v2_shadow_backend = RAGV2ShadowBackend(WORKSPACE_ROOT)
+except Exception as exc:
+    rag_v2_shadow_backend = None
+    _backend_boot_error = f"{type(exc).__name__}: {exc}"
 
 
 def get_backend_engine():
-    if str(RAG_BACKEND).lower() in {"rag_v2", "rag-v2", "shadow", "rag_v2_shadow"}:
-        return rag_v2_shadow_backend
+    desired_backend = str(RAG_BACKEND).lower()
+    if desired_backend in {"rag_v2", "rag-v2", "shadow", "rag_v2_shadow"}:
+        if rag_v2_shadow_backend is not None:
+            return rag_v2_shadow_backend
+        return legacy_engine
     return legacy_engine
 
 
@@ -67,6 +76,8 @@ def health():
         extra={
             "service_mode": RAG_SERVICE_MODE,
             "backend": RAG_BACKEND,
+            "backend_boot_error": _backend_boot_error,
+            "backend_active": type(engine).__name__,
         },
     )
 
@@ -101,7 +112,10 @@ def stats():
 
 @app.get("/compatibility")
 def compatibility():
-    return compatibility_surface_metadata()
+    payload = compatibility_surface_metadata()
+    payload["backend_boot_error"] = _backend_boot_error
+    payload["backend_active"] = type(get_backend_engine()).__name__
+    return payload
 
 
 if __name__ == "__main__":
