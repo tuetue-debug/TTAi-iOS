@@ -533,6 +533,30 @@ async function updateProxyBackendWeight(id, weight) {
     });
 }
 
+async function runProxyBenchmark(testCases = ['T1', 'T2', 'T3', 'T4'], concurrency = 1, durationSeconds = 10) {
+    const result = await fetchAPI('/control-api/proxy/benchmark/run', {
+        method: 'POST',
+        body: JSON.stringify({ test_cases: testCases, concurrency, duration_seconds: durationSeconds })
+    });
+    return result;
+}
+
+async function getBenchmarkStatus(runId) {
+    return await fetchAPI(`/control-api/proxy/benchmark/status/${runId}`);
+}
+
+async function getBenchmarkResults(runId) {
+    return await fetchAPI(`/control-api/proxy/benchmark/results/${runId}`);
+}
+
+async function cancelBenchmark(runId) {
+    return await fetchAPI(`/control-api/proxy/benchmark/cancel/${runId}`, { method: 'POST' });
+}
+
+async function listBenchmarkRuns(limit = 10) {
+    return await fetchAPI(`/control-api/proxy/benchmark/list?limit=${limit}`);
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -769,6 +793,7 @@ function renderOverview() {
                 <div class="panel-header">
                     <div class="panel-title">Proxy Benchmark</div>
                     <div class="panel-subtitle">Direct vs proxy visibility</div>
+                    <button id="run-benchmark-btn" class="btn-refresh">Run Benchmark</button>
                 </div>
                 <div class="panel-content">
                     <div class="panel-row">
@@ -780,8 +805,31 @@ function renderOverview() {
                         <span class="panel-value">${proxyBenchmarkSummary.last_run || '--'}</span>
                     </div>
                     <div class="panel-row">
-                        <span class="panel-label">Note</span>
-                        <span class="panel-value">${(proxyBenchmark.notes || [])[0] || '--'}</span>
+                        <span class="panel-label">Overhead</span>
+                        <span class="panel-value">${proxyBenchmarkSummary.overhead_ms !== null ? proxyBenchmarkSummary.overhead_ms + ' ms' : '--'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Recommendation</span>
+                        <span class="panel-value">${proxyBenchmarkSummary.recommendation || '--'}</span>
+                    </div>
+                    <div id="benchmark-progress-container" style="display: none;">
+                        <div class="panel-row">
+                            <span class="panel-label">Progress</span>
+                            <span class="panel-value">
+                                <progress id="benchmark-progress-bar" value="0" max="1" style="width: 200px;"></progress>
+                                <span id="benchmark-progress-text">0%</span>
+                            </span>
+                        </div>
+                        <div class="panel-row">
+                            <span class="panel-label">Run ID</span>
+                            <span class="panel-value" id="benchmark-run-id">--</span>
+                        </div>
+                        <div class="panel-row">
+                            <span class="panel-label">Actions</span>
+                            <span class="panel-value">
+                                <button id="cancel-benchmark-btn" class="btn-refresh" style="margin-left: 8px;">Cancel</button>
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -870,6 +918,45 @@ function renderOverview() {
                 alert(`Backend weight update failed: ${error.message}`);
             }
         });
+    });
+
+    document.getElementById('run-benchmark-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('run-benchmark-btn');
+        btn.disabled = true;
+        try {
+            const result = await runProxyBenchmark();
+            document.getElementById('benchmark-run-id').textContent = result.run_id;
+            document.getElementById('benchmark-progress-container').style.display = 'block';
+            document.getElementById('benchmark-progress-bar').value = 0;
+            document.getElementById('benchmark-progress-text').textContent = '0%';
+            const interval = setInterval(async () => {
+                try {
+                    const status = await getBenchmarkStatus(result.run_id);
+                    if (!status) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    document.getElementById('benchmark-progress-bar').value = status.progress;
+                    document.getElementById('benchmark-progress-text').textContent = `${Math.round(status.progress * 100)}%`;
+                    if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+                        clearInterval(interval);
+                        btn.disabled = false;
+                        await loadOverview();
+                    }
+                } catch (err) {
+                    console.error('Benchmark status poll error:', err);
+                }
+            }, 2000);
+            document.getElementById('cancel-benchmark-btn').onclick = async () => {
+                clearInterval(interval);
+                await cancelBenchmark(result.run_id);
+                btn.disabled = false;
+                await loadOverview();
+            };
+        } catch (error) {
+            alert(`Benchmark start failed: ${error.message}`);
+            btn.disabled = false;
+        }
     });
 }
 

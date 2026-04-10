@@ -28,8 +28,16 @@ from usage_store import read_usage_events, filter_usage_events, summarize_usage_
 from billing_store import load_billing_config, check_quota_allowance, summarize_billing_usage
 from usage_truth import USAGE_TRUTH
 from proxy_state import get_proxy_runtime_state, get_proxy_backends_state
-from proxy_benchmark import get_latest_proxy_benchmark
+from proxy_benchmark import (
+    get_latest_proxy_benchmark,
+    start_benchmark_run,
+    get_benchmark_status,
+    get_benchmark_results,
+    cancel_benchmark_run,
+    list_benchmark_runs_response,
+)
 from proxy_control_state import set_proxy_mode, set_proxy_hedge, set_backend_enabled, set_backend_weight
+from proxy_benchmark_models import BenchmarkRunRequest
 from api_key_auth import get_api_key_identity
 
 # Configure logging
@@ -2298,6 +2306,41 @@ async def control_proxy_backends(current_user = Depends(get_current_control_user
 @app.get("/control-api/proxy/benchmark/latest")
 async def control_proxy_benchmark_latest(current_user = Depends(get_current_control_user)):
     return get_latest_proxy_benchmark()
+
+
+@app.post("/control-api/proxy/benchmark/run")
+async def control_proxy_benchmark_run(payload: BenchmarkRunRequest, current_user = Depends(get_current_control_user)):
+    result = await start_benchmark_run(payload)
+    return result
+
+
+@app.get("/control-api/proxy/benchmark/status/{run_id}")
+async def control_proxy_benchmark_status(run_id: str, current_user = Depends(get_current_control_user)):
+    status = get_benchmark_status(run_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Benchmark run not found")
+    return status
+
+
+@app.get("/control-api/proxy/benchmark/results/{run_id}")
+async def control_proxy_benchmark_results(run_id: str, current_user = Depends(get_current_control_user)):
+    results = get_benchmark_results(run_id)
+    if not results:
+        raise HTTPException(status_code=404, detail="Benchmark run not found")
+    return results
+
+
+@app.post("/control-api/proxy/benchmark/cancel/{run_id}")
+async def control_proxy_benchmark_cancel(run_id: str, current_user = Depends(get_current_control_user)):
+    success = cancel_benchmark_run(run_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Benchmark run not found or not cancellable")
+    return {"ok": True, "message": "Benchmark cancelled"}
+
+
+@app.get("/control-api/proxy/benchmark/list")
+async def control_proxy_benchmark_list(limit: int = Query(default=10, ge=1, le=50), current_user = Depends(get_current_control_user)):
+    return list_benchmark_runs_response(limit)
 
 
 @app.put("/control-api/proxy/mode")
