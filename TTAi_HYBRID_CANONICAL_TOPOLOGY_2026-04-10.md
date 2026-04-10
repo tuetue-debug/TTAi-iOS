@@ -12,25 +12,39 @@ Chốt topology thật của hệ TTAi Super Model Hybrid, xác định:
 
 # I. Topology hiện tại (từ audit)
 
-## 1.1. Ports từng hoạt động (theo memory và trace map)
-| Port | Service | Vai trò từng có | Trạng thái hiện tại |
-|------|---------|-----------------|---------------------|
+## 1.1. Ports hiện tại (verified 2026-04-10 22:47)
+| Port | Service | Vai trò | Trạng thái hiện tại |
+|------|---------|---------|---------------------|
 | **8000** | FastAPI | control-plane + account/API backend + portal + admin + hybrid endpoints | ✅ Đang chạy (NSSM service `TTAiFastAPI8000`) |
-| **8005** | `ttai_hybrid_v2_fixed.py` | local hybrid execution engine | ⚠️ Tắt (tạm dừng vì load) |
-| **8013** | TTAi Debug | debug/experimental runtime | ⚠️ Tắt (tạm dừng) |
-| **8015** | `simple_proxy.py` / TTAiSimpleProxy | load balancer / routing front door | ⚠️ Tắt (tạm dừng) |
-| **8075** | RAG-V2 | memory / retrieval backend | ✅ Đang chạy (NSSM service `RAGService8075`) |
-| **8090** | collector/control dashboard | monitoring/control surface | ❓ Không rõ |
-| **100.89.201.7:8000** | remote FastAPI | remote execution engine (vannt-work-op) | ❓ Không rõ (cần kiểm tra) |
+| **8005** | `ttai_hybrid_v2_fixed.py` | local hybrid execution engine | ❌ Tắt (không có process) |
+| **8013** | TTAi Debug | debug/experimental runtime | ❌ Tắt (không có process) |
+| **8015** | `simple_proxy.py` / TTAiSimpleProxy | load balancer / routing front door | ❌ Tắt (không có process) |
+| **8075** | RAG-V2 | memory / retrieval backend | ✅ Đang chạy (Python process PID 14244, RAG-V2 backend) |
+| **8090** | collector/control dashboard | monitoring/control surface | ❌ Không có process |
+| **100.89.201.7:8000** | remote FastAPI | remote execution engine (vannt-work-op) | ✅ Đang chạy (có 4 model: qwen3-vl:8b, gemma3:12b, deepseek-r1:8b, gemma3:4b) |
 
 ## 1.2. WordPress / chat.tuetue.vn entry path
-### Giả thuyết hiện tại
-WordPress plugin `ttai-chat-plugin` có thể đang gọi:
-- `http://localhost:8000/chat` (FastAPI 8000)
-- hoặc `http://localhost:8015/chat` (proxy 8015)
-- hoặc `http://localhost:8005/chat` (hybrid 8005)
+### Xác minh từ plugin code + WordPress screenshot
+WordPress plugin `ttai-chat-plugin` (version 1.1.7) có logic:
+1. `get_option('ttai_chat_api_endpoint')` từ WordPress database
+2. Nếu không có, lấy từ env `TTAI_CHAT_API`
+3. Nếu không có, default là `'http://host.docker.internal:8015/api/chat'`
 
-**Cần xác minh thật.**
+### Những gì đã xác minh từ screenshot WordPress
+- Frontend chat tại `https://chat.tuetue.vn` gửi request tới `https://chat.tuetue.vn/wp-admin/admin-ajax.php`
+- Status code trả về tại lớp WordPress AJAX là `200 OK`
+- Plugin active:
+  - `TTAi Chat Interface` v1.1.7
+  - `TTAi Dashboard Control` v0.1.0
+- UI chat vẫn báo lỗi: `Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại sau.`
+
+### Kết luận hiện tại về entry path
+- **Browser-facing entry path**: `chat.tuetue.vn` → `wp-admin/admin-ajax.php`
+- **Backend target phía sau WordPress**: chưa chốt tuyệt đối vì cần payload/response hoặc settings plugin, nhưng theo plugin code thì default target là `http://host.docker.internal:8015/api/chat`
+- Vì `8015` đang tắt, đây là giả thuyết mạnh nhất cho nguyên nhân lỗi hiện tại.
+
+### FastAPI 8000 có endpoint `/api/chat`
+Endpoint tồn tại, nhưng WordPress hiện chưa được chứng minh là đang gọi trực tiếp endpoint này.
 
 ## 1.3. CLI Proxy integration
 - `127.0.0.1:8317` = CLI Proxy internal endpoint
@@ -88,12 +102,12 @@ Control Dashboard (UI)
 
 # III. Xác minh topology thật
 
-## 3.1. Cần trả lời ngay
-1. WordPress plugin hiện gọi port nào?
-2. `8015` có phải canonical entry cho hybrid không?
-3. `8005` có phải canonical execution runtime không?
-4. Remote runtime (`100.89.201.7:8000`) còn sống không?
-5. `8000` hiện có hybrid endpoints không? Nếu có, nên giữ hay chuyển?
+## 3.1. Đã trả lời (Phase 0 findings)
+1. WordPress plugin hiện gọi port nào? → **Chưa biết chắc, default là 8015 nhưng 8015 tắt. Cần kiểm tra WordPress admin.**
+2. `8015` có phải canonical entry cho hybrid không? → **Theo design yes, nhưng hiện tắt.**
+3. `8005` có phải canonical execution runtime không? → **Theo design yes, nhưng hiện tắt.**
+4. Remote runtime (`100.89.201.7:8000`) còn sống không? → **✅ YES, đang chạy với 4 model.**
+5. `8000` hiện có hybrid endpoints không? Nếu có, nên giữ hay chuyển? → **Có `/api/chat` và `/api/hybrid/chat`. Nên chuyển sang 8005/8015 trong Phase 3.**
 
 ## 3.2. Kiểm tra WordPress plugin config
 Cần đọc:
@@ -155,9 +169,9 @@ Test-NetConnection -ComputerName 100.89.201.7 -Port 8000
 5. **WordPress** = customer surface only (không business logic)
 
 ## 5.2. Decisions cần xác minh
-1. WordPress hiện gọi port nào? → **TODO**
-2. Remote node còn sống? → **TODO**
-3. 8000 có hybrid endpoints nào cần chuyển? → **TODO**
+1. WordPress hiện gọi port nào? → **TODO (cần WordPress admin access)**
+2. Remote node còn sống? → **✅ YES, đang chạy với 4 model**
+3. 8000 có hybrid endpoints nào cần chuyển? → **Có `/api/chat` và `/api/hybrid/chat`. Nên chuyển trong Phase 3.**
 
 ## 5.3. Timeline
 - **Ngay**: xác minh WordPress path

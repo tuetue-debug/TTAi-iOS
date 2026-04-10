@@ -19,7 +19,7 @@ Không bật lại service mù. Chốt lại sự thật của hệ trước đ�
 5. ✅ Current control-dashboard capability gap list
 
 ## 1.3. Câu hỏi phải trả lời xong trong Phase 0
-- [ ] WordPress/chat hiện đang gọi port nào?
+- [~] WordPress/chat hiện đang gọi port nào? (đã biết browser → admin-ajax.php; backend target cuối vẫn cần chốt từ settings/payload)
 - [ ] `8015` có phải canonical entry cho hybrid không?
 - [ ] `8005` có phải canonical execution runtime không?
 - [ ] `8000` hiện nên giữ vai trò gì, bỏ vai trò gì?
@@ -67,11 +67,15 @@ cat C:\Users\vannt-pc\.openclaw\workspace\wordpress-chat-plugin.php | findstr "l
 3. Ghi lại API endpoint URL
 4. Chụp ảnh màn hình nếu cần
 
-### [ ] Task 7: Network trace từ browser
+**Status:** Chưa có ảnh settings endpoint; mới có ảnh plugin list + network trace.
+
+### [x] Task 7: Network trace từ browser
 1. Mở chat.tuetue.vn trong Chrome/Firefox
 2. Mở DevTools → Network tab
 3. Gửi một tin nhắn test
-4. Xem request đi đến đâu (port nào)
+4. Xem request đi đến đâu
+
+**Finding:** Browser request đi tới `https://chat.tuetue.vn/wp-admin/admin-ajax.php` (status `200 OK`). Đây là AJAX bridge của WordPress, chưa phải backend hybrid cuối cùng.
 
 ### [ ] Task 8: Test direct endpoints
 ```powershell
