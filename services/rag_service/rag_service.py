@@ -78,6 +78,8 @@ def health():
             "backend": get_backend_name(),
             "backend_boot_error": _backend_boot_error,
             "backend_active": type(engine).__name__,
+            "env_backend_raw": os.environ.get("TTAI_RAG_BACKEND"),
+            "env_service_mode_raw": os.environ.get("TTAI_RAG_SERVICE_MODE"),
         },
     )
 
@@ -115,6 +117,8 @@ def compatibility():
     payload = compatibility_surface_metadata()
     payload["backend_boot_error"] = _backend_boot_error
     payload["backend_active"] = type(get_backend_engine()).__name__
+    payload["env_backend_raw"] = os.environ.get("TTAI_RAG_BACKEND")
+    payload["env_service_mode_raw"] = os.environ.get("TTAI_RAG_SERVICE_MODE")
     return payload
 
 
