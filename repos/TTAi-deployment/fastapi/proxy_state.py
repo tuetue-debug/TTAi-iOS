@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from proxy_control_state import load_proxy_control_state
+
 PROXY_PORT = 8015
 PROXY_ROOT_URL = f"http://127.0.0.1:{PROXY_PORT}"
 REQUEST_TIMEOUT = httpx.Timeout(5.0, connect=1.0)
@@ -127,6 +129,8 @@ async def _probe_backend(url: str) -> Dict[str, Any]:
 
 async def get_proxy_backends_state() -> Dict[str, Any]:
     runtime = await probe_proxy_runtime()
+    control_state = load_proxy_control_state()
+    control_backends = control_state.get("backends", {})
     live_backends = [_normalize_url(item) for item in (runtime.get("backends") or [])]
     code_backends = _extract_backends_from_code()
 
@@ -145,16 +149,18 @@ async def get_proxy_backends_state() -> Dict[str, Any]:
             "preferred": False,
             "enabled": True,
         })
+        backend_id = meta["id"]
+        overlay = control_backends.get(backend_id, {}) if isinstance(control_backends, dict) else {}
         probe = await _probe_backend(url)
         item = {
-            "id": meta["id"],
+            "id": backend_id,
             "url": url,
             "role": meta["role"],
             "node": meta["node"],
-            "enabled": meta["enabled"],
+            "enabled": overlay.get("enabled", meta["enabled"]),
             "healthy": probe["healthy"],
-            "preferred": meta["preferred"],
-            "weight": meta["weight"],
+            "preferred": bool(overlay.get("weight", meta["weight"])) and backend_id == "remote-workop-8000" if control_state.get("mode") == "remote-first" else meta["preferred"],
+            "weight": overlay.get("weight", meta["weight"]),
             "latency_ms": probe["latency_ms"],
             "error": probe["error"],
             "identity": probe["identity"],
@@ -171,21 +177,24 @@ async def get_proxy_backends_state() -> Dict[str, Any]:
             "source": source,
         },
         "items": items,
+        "control_state": control_state,
     }
 
 
 async def get_proxy_runtime_state() -> Dict[str, Any]:
     runtime = await probe_proxy_runtime()
     backends = await get_proxy_backends_state()
+    control_state = backends.get("control_state", {})
     preferred = next((item["id"] for item in backends.get("items", []) if item.get("preferred")), runtime.get("preferred_backend"))
     return {
         "summary": {
             "service_status": runtime.get("status", "unknown"),
             "service_name": runtime.get("service_name", "TTAiSimpleProxy"),
             "port": runtime.get("port", PROXY_PORT),
-            "mode": runtime.get("mode", "stabilize"),
+            "mode": control_state.get("mode", runtime.get("mode", "stabilize")),
             "preferred_backend": preferred,
-            "hedge_enabled": runtime.get("hedge_enabled", False),
+            "hedge_enabled": control_state.get("hedge", {}).get("enabled", runtime.get("hedge_enabled", False)),
+            "hedge_delay_seconds": control_state.get("hedge", {}).get("delay_seconds", runtime.get("hedge_delay_seconds")),
             "backend_count": backends.get("summary", {}).get("count", 0),
             "healthy_backend_count": backends.get("summary", {}).get("healthy", 0),
             "last_probe": int(time.time()),
@@ -197,5 +206,6 @@ async def get_proxy_runtime_state() -> Dict[str, Any]:
             "version": runtime.get("version", "unknown"),
             "backends": runtime.get("backends") or [item["url"] for item in backends.get("items", [])],
             "health": runtime.get("health", {}),
+            "control_state": control_state,
         },
     }

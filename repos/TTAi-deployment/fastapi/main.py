@@ -29,6 +29,7 @@ from billing_store import load_billing_config, check_quota_allowance, summarize_
 from usage_truth import USAGE_TRUTH
 from proxy_state import get_proxy_runtime_state, get_proxy_backends_state
 from proxy_benchmark import get_latest_proxy_benchmark
+from proxy_control_state import set_proxy_mode, set_proxy_hedge, set_backend_enabled, set_backend_weight
 from api_key_auth import get_api_key_identity
 
 # Configure logging
@@ -332,6 +333,19 @@ class ControlActionRequest(BaseModel):
     action: str
     target: Optional[str] = None
     timeout: int = 30
+
+
+class ProxyModeUpdateRequest(BaseModel):
+    mode: str
+
+
+class ProxyHedgeUpdateRequest(BaseModel):
+    enabled: bool
+    delay_seconds: float = Field(default=0.35, ge=0.0, le=5.0)
+
+
+class ProxyWeightUpdateRequest(BaseModel):
+    weight: int = Field(ge=0, le=100)
 
 
 class PortalSignupRequest(BaseModel):
@@ -2284,6 +2298,51 @@ async def control_proxy_backends(current_user = Depends(get_current_control_user
 @app.get("/control-api/proxy/benchmark/latest")
 async def control_proxy_benchmark_latest(current_user = Depends(get_current_control_user)):
     return get_latest_proxy_benchmark()
+
+
+@app.put("/control-api/proxy/mode")
+async def control_proxy_mode_update(payload: ProxyModeUpdateRequest, current_user = Depends(get_current_control_user)):
+    try:
+        state = set_proxy_mode(payload.mode)
+        return {"ok": True, "message": f"Proxy mode updated to {payload.mode}", "state": state}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/control-api/proxy/hedge")
+async def control_proxy_hedge_update(payload: ProxyHedgeUpdateRequest, current_user = Depends(get_current_control_user)):
+    try:
+        state = set_proxy_hedge(payload.enabled, payload.delay_seconds)
+        return {"ok": True, "message": "Proxy hedge updated", "state": state}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/control-api/proxy/backends/{backend_id}/enable")
+async def control_proxy_backend_enable(backend_id: str, current_user = Depends(get_current_control_user)):
+    try:
+        state = set_backend_enabled(backend_id, True)
+        return {"ok": True, "message": f"Backend {backend_id} enabled", "state": state}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/control-api/proxy/backends/{backend_id}/disable")
+async def control_proxy_backend_disable(backend_id: str, current_user = Depends(get_current_control_user)):
+    try:
+        state = set_backend_enabled(backend_id, False)
+        return {"ok": True, "message": f"Backend {backend_id} disabled", "state": state}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/control-api/proxy/backends/{backend_id}/weight")
+async def control_proxy_backend_weight_update(backend_id: str, payload: ProxyWeightUpdateRequest, current_user = Depends(get_current_control_user)):
+    try:
+        state = set_backend_weight(backend_id, payload.weight)
+        return {"ok": True, "message": f"Backend {backend_id} weight updated", "state": state}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/control-api/usage")

@@ -506,6 +506,33 @@ function renderStatusWithDot(status, tone) {
     return `<span class="status-pill ${tone}"><span class="status-light ${tone}"></span><span>${status}</span></span>`;
 }
 
+async function updateProxyMode(mode) {
+    await fetchAPI('/control-api/proxy/mode', {
+        method: 'PUT',
+        body: JSON.stringify({ mode })
+    });
+}
+
+async function updateProxyHedge(enabled, delaySeconds) {
+    await fetchAPI('/control-api/proxy/hedge', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled, delay_seconds: delaySeconds })
+    });
+}
+
+async function toggleProxyBackend(id, enabled) {
+    await fetchAPI(`/control-api/proxy/backends/${id}/${enabled ? 'enable' : 'disable'}`, {
+        method: 'POST'
+    });
+}
+
+async function updateProxyBackendWeight(id, weight) {
+    await fetchAPI(`/control-api/proxy/backends/${id}/weight`, {
+        method: 'PUT',
+        body: JSON.stringify({ weight })
+    });
+}
+
 // Overview page
 async function loadOverview() {
     try {
@@ -684,7 +711,14 @@ function renderOverview() {
                     </div>
                     <div class="panel-row">
                         <span class="panel-label">Mode</span>
-                        <span class="panel-value">${proxySummary.mode || '--'}</span>
+                        <span class="panel-value">
+                            <select id="proxy-mode-select" class="input-inline">
+                                <option value="stabilize" ${proxySummary.mode === 'stabilize' ? 'selected' : ''}>stabilize</option>
+                                <option value="remote-first" ${proxySummary.mode === 'remote-first' ? 'selected' : ''}>remote-first</option>
+                                <option value="balanced-lite" ${proxySummary.mode === 'balanced-lite' ? 'selected' : ''}>balanced-lite</option>
+                                <option value="diagnostic" ${proxySummary.mode === 'diagnostic' ? 'selected' : ''}>diagnostic</option>
+                            </select>
+                        </span>
                     </div>
                     <div class="panel-row">
                         <span class="panel-label">Preferred Backend</span>
@@ -692,7 +726,13 @@ function renderOverview() {
                     </div>
                     <div class="panel-row">
                         <span class="panel-label">Hedge</span>
-                        <span class="panel-value">${proxySummary.hedge_enabled ? 'On' : 'Off'}</span>
+                        <span class="panel-value">
+                            <label><input type="checkbox" id="proxy-hedge-toggle" ${proxySummary.hedge_enabled ? 'checked' : ''}/> enabled</label>
+                        </span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Hedge Delay</span>
+                        <span class="panel-value"><input id="proxy-hedge-delay" class="input-inline" type="number" min="0" max="5" step="0.05" value="${proxySummary.hedge_delay_seconds ?? 0.35}" /></span>
                     </div>
                     <div class="panel-row">
                         <span class="panel-label">State Source</span>
@@ -710,7 +750,11 @@ function renderOverview() {
                     ${proxyItems.length > 0 ? proxyItems.map(item => `
                         <div class="panel-row">
                             <span class="panel-label">${item.id} · ${item.role} · ${item.healthy ? 'healthy' : 'unhealthy'}</span>
-                            <span class="panel-value">${item.weight ?? 0}% · ${item.latency_ms ?? '--'} ms</span>
+                            <span class="panel-value">
+                                <label><input type="checkbox" class="proxy-backend-toggle" data-backend-id="${item.id}" ${item.enabled ? 'checked' : ''}/> on</label>
+                                <input type="number" class="input-inline proxy-backend-weight" data-backend-id="${item.id}" min="0" max="100" step="1" value="${item.weight ?? 0}" />%
+                                <button class="btn-refresh proxy-weight-apply" data-backend-id="${item.id}">Apply</button>
+                            </span>
                         </div>
                     `).join('') : `
                         <div class="panel-row">
@@ -769,6 +813,63 @@ function renderOverview() {
         } finally {
             btn.disabled = false;
         }
+    });
+
+    document.getElementById('proxy-mode-select')?.addEventListener('change', async (e) => {
+        try {
+            await updateProxyMode(e.target.value);
+            await loadOverview();
+        } catch (error) {
+            alert(`Proxy mode update failed: ${error.message}`);
+        }
+    });
+
+    document.getElementById('proxy-hedge-toggle')?.addEventListener('change', async () => {
+        const enabled = document.getElementById('proxy-hedge-toggle')?.checked || false;
+        const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
+        try {
+            await updateProxyHedge(enabled, delay);
+            await loadOverview();
+        } catch (error) {
+            alert(`Proxy hedge update failed: ${error.message}`);
+        }
+    });
+
+    document.getElementById('proxy-hedge-delay')?.addEventListener('change', async () => {
+        const enabled = document.getElementById('proxy-hedge-toggle')?.checked || false;
+        const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
+        try {
+            await updateProxyHedge(enabled, delay);
+            await loadOverview();
+        } catch (error) {
+            alert(`Proxy hedge delay update failed: ${error.message}`);
+        }
+    });
+
+    document.querySelectorAll('.proxy-backend-toggle').forEach(toggle => {
+        toggle.addEventListener('change', async (e) => {
+            const backendId = e.target.getAttribute('data-backend-id');
+            try {
+                await toggleProxyBackend(backendId, e.target.checked);
+                await loadOverview();
+            } catch (error) {
+                alert(`Backend toggle failed: ${error.message}`);
+            }
+        });
+    });
+
+    document.querySelectorAll('.proxy-weight-apply').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const backendId = e.target.getAttribute('data-backend-id');
+            const input = document.querySelector(`.proxy-backend-weight[data-backend-id="${backendId}"]`);
+            const weight = parseInt(input?.value || '0', 10);
+            try {
+                await updateProxyBackendWeight(backendId, weight);
+                await loadOverview();
+            } catch (error) {
+                alert(`Backend weight update failed: ${error.message}`);
+            }
+        });
     });
 }
 
