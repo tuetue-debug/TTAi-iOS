@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query, Header, Request, Res
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 import httpx
 import json
