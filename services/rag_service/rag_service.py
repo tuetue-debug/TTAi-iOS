@@ -125,5 +125,15 @@ def compatibility():
     return payload
 
 
+@app.get("/build-proof")
+def build_proof():
+    return {
+        "proof": BUILD_MARKER,
+        "pid": os.getpid(),
+        "cwd": os.getcwd(),
+        "file": __file__,
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host=RAG_PUBLIC_HOST, port=RAG_PUBLIC_PORT)
