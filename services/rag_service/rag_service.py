@@ -37,6 +37,7 @@ KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 legacy_engine = RAGEngine(persist_directory=str(KNOWLEDGE_DIR))
 adapter = CompatibilityAdapter()
 _backend_boot_error = None
+BUILD_MARKER = "rag-service-build-d68cd55-marker-1"
 
 try:
     rag_v2_shadow_backend = RAGV2ShadowBackend(WORKSPACE_ROOT)
@@ -80,6 +81,7 @@ def health():
             "backend_active": type(engine).__name__,
             "env_backend_raw": os.environ.get("TTAI_RAG_BACKEND"),
             "env_service_mode_raw": os.environ.get("TTAI_RAG_SERVICE_MODE"),
+            "build_marker": BUILD_MARKER,
         },
     )
 
@@ -119,6 +121,7 @@ def compatibility():
     payload["backend_active"] = type(get_backend_engine()).__name__
     payload["env_backend_raw"] = os.environ.get("TTAI_RAG_BACKEND")
     payload["env_service_mode_raw"] = os.environ.get("TTAI_RAG_SERVICE_MODE")
+    payload["build_marker"] = BUILD_MARKER
     return payload
 
 
