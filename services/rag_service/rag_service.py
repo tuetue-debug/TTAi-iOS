@@ -13,6 +13,7 @@ if str(WORKSPACE_ROOT) not in sys.path:
 
 from rag_engine import RAGEngine  # noqa: E402
 from compatibility_adapter import CompatibilityAdapter  # noqa: E402
+from rag_v2_backend import RAGV2ShadowBackend  # noqa: E402
 from rag_service_config import (  # noqa: E402
     RAG_BACKEND,
     RAG_KB_PATH,
@@ -33,8 +34,15 @@ app.add_middleware(
 
 KNOWLEDGE_DIR = Path(RAG_KB_PATH)
 KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
-engine = RAGEngine(persist_directory=str(KNOWLEDGE_DIR))
+legacy_engine = RAGEngine(persist_directory=str(KNOWLEDGE_DIR))
+rag_v2_shadow_backend = RAGV2ShadowBackend(WORKSPACE_ROOT)
 adapter = CompatibilityAdapter()
+
+
+def get_backend_engine():
+    if str(RAG_BACKEND).lower() in {"rag_v2", "rag-v2", "shadow", "rag_v2_shadow"}:
+        return rag_v2_shadow_backend
+    return legacy_engine
 
 
 class SearchRequest(BaseModel):
@@ -49,7 +57,11 @@ class ContextRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    stats = engine.get_collection_stats()
+    engine = get_backend_engine()
+    if hasattr(engine, "get_collection_stats"):
+        stats = engine.get_collection_stats()
+    else:
+        stats = engine.stats()
     return adapter.map_health(
         stats,
         extra={
@@ -61,19 +73,30 @@ def health():
 
 @app.post("/search")
 def search(request: SearchRequest):
-    results = engine.search(request.query, n_results=request.top_k)
+    engine = get_backend_engine()
+    if hasattr(engine, "get_context_for_query"):
+        results = engine.search(request.query, n_results=request.top_k)
+    else:
+        results = engine.search(request.query, top_k=request.top_k)
     return adapter.map_search_results(results)
 
 
 @app.post("/context")
 def context(request: ContextRequest):
-    context_text = engine.get_context_for_query(request.query, max_tokens=request.max_tokens)
+    engine = get_backend_engine()
+    if hasattr(engine, "get_context_for_query"):
+        context_text = engine.get_context_for_query(request.query, max_tokens=request.max_tokens)
+    else:
+        context_text = engine.context(request.query, max_tokens=request.max_tokens)
     return adapter.map_context_result(context_text)
 
 
 @app.get("/stats")
 def stats():
-    return engine.get_collection_stats()
+    engine = get_backend_engine()
+    if hasattr(engine, "get_collection_stats"):
+        return engine.get_collection_stats()
+    return engine.stats()
 
 
 @app.get("/compatibility")

@@ -8,8 +8,11 @@ This folder now has the foundation for treating port `8075` as a stable public c
 - `compatibility_adapter.py` = maps backend retrieval outputs into the legacy 8075 response contract
 
 ## Intent
-These files do not flip runtime behavior on their own.
-They prepare the codebase so `rag_service.py` can become a stable wrapper while retrieval internals evolve behind it.
+These files do not force a live cutover on their own.
+They prepare the codebase so `rag_service.py` becomes a stable wrapper while retrieval internals evolve behind it.
+
+A new internal backend path now exists for shadow wiring:
+- `rag_v2_backend.py` = lightweight evidence-first backend that can sit behind the compatibility surface without changing the public API.
 
 ## Stable public contract to preserve
 - `GET /health`
