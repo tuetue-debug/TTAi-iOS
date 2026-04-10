@@ -13,6 +13,9 @@ let modelsData = null;
 let systemData = null;
 let usageData = null;
 let topologyData = null;
+let proxyStateData = null;
+let proxyBackendsData = null;
+let proxyBenchmarkData = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
@@ -506,8 +509,16 @@ function renderStatusWithDot(status, tone) {
 // Overview page
 async function loadOverview() {
     try {
-        const data = await fetchAPI('/control-api/overview?usage_limit=50&recent_events_limit=5');
-        overviewData = data;
+        const [overview, proxyState, proxyBackends, proxyBenchmark] = await Promise.all([
+            fetchAPI('/control-api/overview?usage_limit=50&recent_events_limit=5'),
+            fetchAPI('/control-api/proxy/state'),
+            fetchAPI('/control-api/proxy/backends'),
+            fetchAPI('/control-api/proxy/benchmark/latest')
+        ]);
+        overviewData = overview;
+        proxyStateData = proxyState;
+        proxyBackendsData = proxyBackends;
+        proxyBenchmarkData = proxyBenchmark;
         renderOverview();
     } catch (error) {
         throw error;
@@ -517,6 +528,9 @@ async function loadOverview() {
 function renderOverview() {
     const pageEl = document.getElementById('page-overview');
     const data = overviewData;
+    const proxyState = proxyStateData || {};
+    const proxyBackends = proxyBackendsData || {};
+    const proxyBenchmark = proxyBenchmarkData || {};
     
     if (!data) return;
     
@@ -535,6 +549,10 @@ function renderOverview() {
         Object.keys(data.quota.reason_breakdown)[0] || 'N/A' : 'N/A';
     
     const recentErrors = data.alerts?.recent_errors || [];
+    const proxySummary = proxyState.summary || {};
+    const proxyRuntime = proxyState.runtime || {};
+    const proxyItems = proxyBackends.items || [];
+    const proxyBenchmarkSummary = proxyBenchmark.summary || {};
     
     pageEl.innerHTML = `
         <div class="action-bar">
@@ -651,6 +669,76 @@ function renderOverview() {
                             <span class="panel-value">No recent errors</span>
                         </div>`
                     }
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Proxy Status</div>
+                    <div class="panel-subtitle">8015 routing module</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row">
+                        <span class="panel-label">Service Status</span>
+                        <span class="panel-value">${proxySummary.service_status || 'unknown'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Mode</span>
+                        <span class="panel-value">${proxySummary.mode || '--'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Preferred Backend</span>
+                        <span class="panel-value">${proxySummary.preferred_backend || '--'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Hedge</span>
+                        <span class="panel-value">${proxySummary.hedge_enabled ? 'On' : 'Off'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">State Source</span>
+                        <span class="panel-value">${proxyRuntime.source || '--'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Proxy Backend Pool</div>
+                    <div class="panel-subtitle">Current routing candidates</div>
+                </div>
+                <div class="panel-content">
+                    ${proxyItems.length > 0 ? proxyItems.map(item => `
+                        <div class="panel-row">
+                            <span class="panel-label">${item.id} · ${item.role} · ${item.healthy ? 'healthy' : 'unhealthy'}</span>
+                            <span class="panel-value">${item.weight ?? 0}% · ${item.latency_ms ?? '--'} ms</span>
+                        </div>
+                    `).join('') : `
+                        <div class="panel-row">
+                            <span class="panel-label">Backends</span>
+                            <span class="panel-value">No data</span>
+                        </div>
+                    `}
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Proxy Benchmark</div>
+                    <div class="panel-subtitle">Direct vs proxy visibility</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row">
+                        <span class="panel-label">Status</span>
+                        <span class="panel-value">${proxyBenchmarkSummary.status || (proxyBenchmark.available ? 'available' : 'not_run')}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Last Run</span>
+                        <span class="panel-value">${proxyBenchmarkSummary.last_run || '--'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Note</span>
+                        <span class="panel-value">${(proxyBenchmark.notes || [])[0] || '--'}</span>
+                    </div>
                 </div>
             </div>
         </div>
