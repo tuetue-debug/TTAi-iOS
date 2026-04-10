@@ -27,6 +27,8 @@ from account_routes import router as account_router
 from usage_store import read_usage_events, filter_usage_events, summarize_usage_events
 from billing_store import load_billing_config, check_quota_allowance, summarize_billing_usage
 from usage_truth import USAGE_TRUTH
+from proxy_state import get_proxy_runtime_state, get_proxy_backends_state
+from proxy_benchmark import get_latest_proxy_benchmark
 from api_key_auth import get_api_key_identity
 
 # Configure logging
@@ -2268,6 +2270,21 @@ async def control_topology(current_user = Depends(get_current_control_user)):
         },
         "inventory": inventory,
     }
+
+@app.get("/control-api/proxy/state")
+async def control_proxy_state(current_user = Depends(get_current_control_user)):
+    return await get_proxy_runtime_state()
+
+
+@app.get("/control-api/proxy/backends")
+async def control_proxy_backends(current_user = Depends(get_current_control_user)):
+    return await get_proxy_backends_state()
+
+
+@app.get("/control-api/proxy/benchmark/latest")
+async def control_proxy_benchmark_latest(current_user = Depends(get_current_control_user)):
+    return get_latest_proxy_benchmark()
+
 
 @app.get("/control-api/usage")
 async def control_usage(limit: int = Query(default=20, ge=5, le=100), current_user = Depends(get_current_control_user)):

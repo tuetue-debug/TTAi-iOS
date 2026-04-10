@@ -18,6 +18,9 @@ const overviewSummaryEl = document.getElementById('overviewSummary');
 const billingSummaryEl = document.getElementById('billingSummary');
 const quotaBlockedSummaryEl = document.getElementById('quotaBlockedSummary');
 const errorSummaryEl = document.getElementById('errorSummary');
+const proxyStatusCardEl = document.getElementById('proxyStatusCard');
+const proxyBackendTableEl = document.getElementById('proxyBackendTable');
+const proxyBenchmarkPanelEl = document.getElementById('proxyBenchmarkPanel');
 
 // Headers for API calls
 const headers = {
@@ -80,6 +83,75 @@ function renderSummaryList(container, items) {
         row.innerHTML = `<span class="label">${item.label}</span><span class="value">${item.value}</span>`;
         container.appendChild(row);
     });
+}
+
+function formatProxyStatus(status) {
+    if (!status) return '--';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+async function loadProxyState() {
+    if (!proxyStatusCardEl) return;
+    try {
+        const response = await fetch(`${CONTROL_API_BASE}/proxy/state`, { headers: adminHeaders });
+        if (!response.ok) throw new Error('Failed to load proxy state');
+        const data = await response.json();
+        const summary = data.summary || {};
+        const runtime = data.runtime || {};
+        proxyStatusCardEl.innerHTML = `
+            <div class="summary-item"><span class="label">Status</span><span class="value">${formatProxyStatus(summary.service_status)}</span></div>
+            <div class="summary-item"><span class="label">Mode</span><span class="value">${summary.mode || '--'}</span></div>
+            <div class="summary-item"><span class="label">Preferred</span><span class="value">${summary.preferred_backend || '--'}</span></div>
+            <div class="summary-item"><span class="label">Hedge</span><span class="value">${summary.hedge_enabled ? 'On' : 'Off'}</span></div>
+            <div class="summary-item"><span class="label">Healthy Backends</span><span class="value">${summary.healthy_backend_count ?? '--'}/${summary.backend_count ?? '--'}</span></div>
+            <div class="summary-item"><span class="label">Source</span><span class="value">${runtime.source || '--'}</span></div>
+        `;
+    } catch (error) {
+        console.error('Error loading proxy state:', error);
+        proxyStatusCardEl.innerHTML = '<div class="summary-item"><span class="label">Proxy state</span><span class="value">Error</span></div>';
+    }
+}
+
+async function loadProxyBackends() {
+    if (!proxyBackendTableEl) return;
+    try {
+        const response = await fetch(`${CONTROL_API_BASE}/proxy/backends`, { headers: adminHeaders });
+        if (!response.ok) throw new Error('Failed to load proxy backends');
+        const data = await response.json();
+        const items = data.items || [];
+        if (!items.length) {
+            proxyBackendTableEl.innerHTML = '<div class="summary-item"><span class="label">Backends</span><span class="value">No data</span></div>';
+            return;
+        }
+        proxyBackendTableEl.innerHTML = items.map(item => `
+            <div class="summary-item">
+                <span class="label">${item.id} · ${item.role} · ${item.healthy ? 'Healthy' : 'Unhealthy'}</span>
+                <span class="value">${item.weight ?? 0}% · ${item.latency_ms ?? '--'} ms</span>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading proxy backends:', error);
+        proxyBackendTableEl.innerHTML = '<div class="summary-item"><span class="label">Backends</span><span class="value">Error</span></div>';
+    }
+}
+
+async function loadProxyBenchmark() {
+    if (!proxyBenchmarkPanelEl) return;
+    try {
+        const response = await fetch(`${CONTROL_API_BASE}/proxy/benchmark/latest`, { headers: adminHeaders });
+        if (!response.ok) throw new Error('Failed to load proxy benchmark');
+        const data = await response.json();
+        const summary = data.summary || {};
+        const notes = (data.notes || []).slice(0, 2).join(' · ');
+        proxyBenchmarkPanelEl.innerHTML = `
+            <div class="summary-item"><span class="label">Status</span><span class="value">${summary.status || (data.available ? 'available' : 'not_run')}</span></div>
+            <div class="summary-item"><span class="label">Last Run</span><span class="value">${summary.last_run || '--'}</span></div>
+            <div class="summary-item"><span class="label">Notes</span><span class="value">${notes || '--'}</span></div>
+        `;
+    } catch (error) {
+        console.error('Error loading proxy benchmark:', error);
+        proxyBenchmarkPanelEl.innerHTML = '<div class="summary-item"><span class="label">Benchmark</span><span class="value">Error</span></div>';
+    }
 }
 
 async function loadAdminOverview() {
@@ -319,7 +391,10 @@ async function refreshAll() {
             loadModels(),
             loadGPUMetrics(),
             loadVectorStats(),
-            loadServiceHealth()
+            loadServiceHealth(),
+            loadProxyState(),
+            loadProxyBackends(),
+            loadProxyBenchmark()
         ]);
     } catch (error) {
         console.error('Error refreshing data:', error);
