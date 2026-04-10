@@ -15,12 +15,12 @@ from rag_engine import RAGEngine  # noqa: E402
 from compatibility_adapter import CompatibilityAdapter  # noqa: E402
 from rag_v2_backend import RAGV2ShadowBackend  # noqa: E402
 from rag_service_config import (  # noqa: E402
-    RAG_BACKEND,
     RAG_KB_PATH,
     RAG_PUBLIC_HOST,
     RAG_PUBLIC_PORT,
-    RAG_SERVICE_MODE,
     compatibility_surface_metadata,
+    get_backend_name,
+    get_service_mode,
 )
 
 app = FastAPI(title="TTAi RAG Service", version="1.1.0")
@@ -46,7 +46,7 @@ except Exception as exc:
 
 
 def get_backend_engine():
-    desired_backend = str(RAG_BACKEND).lower()
+    desired_backend = str(get_backend_name()).lower()
     if desired_backend in {"rag_v2", "rag-v2", "shadow", "rag_v2_shadow"}:
         if rag_v2_shadow_backend is not None:
             return rag_v2_shadow_backend
@@ -74,8 +74,8 @@ def health():
     return adapter.map_health(
         stats,
         extra={
-            "service_mode": RAG_SERVICE_MODE,
-            "backend": RAG_BACKEND,
+            "service_mode": get_service_mode(),
+            "backend": get_backend_name(),
             "backend_boot_error": _backend_boot_error,
             "backend_active": type(engine).__name__,
         },
