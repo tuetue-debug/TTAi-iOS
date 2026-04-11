@@ -1060,3 +1060,15 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* Benchmark widget fixes */
+.benchmark-widget .panel-value,
+.benchmark-widget .panel-label {
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    white-space: normal !important;
+}
+
+.benchmark-widget {
+    min-width: 300px;
+}
