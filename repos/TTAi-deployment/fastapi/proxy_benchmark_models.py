@@ -67,6 +67,7 @@ class BenchmarkRun(BaseModel):
     results: List[BenchmarkResultItem] = Field(default_factory=list)
     summary: Optional[BenchmarkRunSummary] = None
     error_message: Optional[str] = None
+    duration_seconds: int = Field(default=10, ge=5, le=60)
 
 
 class BenchmarkRunRequest(BaseModel):

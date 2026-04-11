@@ -30,7 +30,8 @@ def _ensure_db() -> None:
                 test_cases_json TEXT NOT NULL,
                 results_json TEXT,
                 summary_json TEXT,
-                error_message TEXT
+                error_message TEXT,
+                duration_seconds INTEGER DEFAULT 10
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_benchmark_runs_started_at ON benchmark_runs(started_at)")
@@ -47,8 +48,8 @@ def save_benchmark_run(run: BenchmarkRun) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO benchmark_runs
-            (run_id, started_at, completed_at, status, test_cases_json, results_json, summary_json, error_message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (run_id, started_at, completed_at, status, test_cases_json, results_json, summary_json, error_message, duration_seconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run.run_id,
@@ -59,6 +60,7 @@ def save_benchmark_run(run: BenchmarkRun) -> None:
                 json.dumps([r.dict() for r in run.results], ensure_ascii=False) if run.results else None,
                 run.summary.json() if run.summary else None,
                 run.error_message,
+                run.duration_seconds,
             ),
         )
         conn.commit()
@@ -71,14 +73,14 @@ def load_benchmark_run(run_id: str) -> Optional[BenchmarkRun]:
     conn = sqlite3.connect(str(DB_PATH))
     try:
         cur = conn.execute(
-            "SELECT started_at, completed_at, status, test_cases_json, results_json, summary_json, error_message "
+            "SELECT started_at, completed_at, status, test_cases_json, results_json, summary_json, error_message, duration_seconds "
             "FROM benchmark_runs WHERE run_id = ?",
             (run_id,),
         )
         row = cur.fetchone()
         if not row:
             return None
-        started_at, completed_at, status_str, test_cases_json, results_json, summary_json, error_message = row
+        started_at, completed_at, status_str, test_cases_json, results_json, summary_json, error_message, duration_seconds = row
         test_cases = []
         if test_cases_json:
             test_cases = json.loads(test_cases_json)
@@ -97,6 +99,7 @@ def load_benchmark_run(run_id: str) -> Optional[BenchmarkRun]:
             results=[BenchmarkResultItem(**r) for r in results] if results else [],
             summary=BenchmarkRunSummary(**summary) if summary else None,
             error_message=error_message,
+            duration_seconds=duration_seconds or 10,
         )
     finally:
         conn.close()
@@ -169,6 +172,7 @@ def list_benchmark_runs(limit: int = 10) -> List[BenchmarkRun]:
                     results=[BenchmarkResultItem(**r) for r in results] if results else [],
                     summary=BenchmarkRunSummary(**summary) if summary else None,
                     error_message=error_message,
+                    duration_seconds=row[7] if len(row) > 7 else 10,
                 )
             )
         return runs
