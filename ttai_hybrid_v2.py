@@ -259,7 +259,7 @@ async def call_remote_ollama(provider: ProviderInfo, message: str) -> str:
 
 async def call_remote_fastapi(provider: ProviderInfo, message: str, user_id: str) -> str:
     """Call remote FastAPI endpoint with timeout"""
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=25.0) as client:
         payload = {
             "message": message,
             "model": "",
