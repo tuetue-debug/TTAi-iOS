@@ -147,9 +147,15 @@ def select_provider(message: str, requested_model: str = "") -> ProviderInfo:
             print(f"Complex query -> Gemini Pro: {gemini_pro_providers[0].name}")
             return gemini_pro_providers[0]
     
-    # STRATEGY 3: Fast responses -> Gemini Flash (fastest)
+    # STRATEGY 3: Fast responses -> Remote Ollama (free & fast), fallback to Gemini Flash
     fast_keywords = ["nhanh", "gap", "urgent", "quick", "simple", "hello", "xin chao", "chao"]
     if any(word in message_normalized for word in fast_keywords):
+        # First try remote Ollama (free)
+        remote_ollama_providers = [p for p in PROVIDERS if p.type == "remote_ollama" and p.enabled]
+        if remote_ollama_providers:
+            print(f"Fast query -> Remote Ollama: {remote_ollama_providers[0].name}")
+            return remote_ollama_providers[0]
+        # Fallback to Gemini Flash
         gemini_flash_providers = [p for p in PROVIDERS if "flash" in p.name and p.enabled]
         if gemini_flash_providers:
             print(f"Fast query -> Gemini Flash: {gemini_flash_providers[0].name}")
