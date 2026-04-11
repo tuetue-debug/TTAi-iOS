@@ -81,10 +81,10 @@ def load_benchmark_run(run_id: str) -> Optional[BenchmarkRun]:
         started_at, completed_at, status_str, test_cases_json, results_json, summary_json, error_message = row
         test_cases = []
         if test_cases_json:
-            test_cases = [json.loads(tc) for tc in json.loads(test_cases_json)]
+            test_cases = json.loads(test_cases_json)
         results = []
         if results_json:
-            results = [json.loads(r) for r in json.loads(results_json)]
+            results = json.loads(results_json)
         summary = None
         if summary_json:
             summary = json.loads(summary_json)
@@ -152,10 +152,10 @@ def list_benchmark_runs(limit: int = 10) -> List[BenchmarkRun]:
             run_id, started_at, completed_at, status_str, test_cases_json, results_json, summary_json, error_message = row
             test_cases = []
             if test_cases_json:
-                test_cases = [json.loads(tc) for tc in json.loads(test_cases_json)]
+                test_cases = json.loads(test_cases_json)
             results = []
             if results_json:
-                results = [json.loads(r) for r in json.loads(results_json)]
+                results = json.loads(results_json)
             summary = None
             if summary_json:
                 summary = json.loads(summary_json)
