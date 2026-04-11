@@ -151,13 +151,13 @@ def list_benchmark_runs(limit: int = 10) -> List[BenchmarkRun]:
     conn = sqlite3.connect(str(DB_PATH))
     try:
         cur = conn.execute(
-            "SELECT run_id, started_at, completed_at, status, test_cases_json, results_json, summary_json, error_message "
+            "SELECT run_id, started_at, completed_at, status, test_cases_json, results_json, summary_json, error_message, duration_seconds "
             "FROM benchmark_runs ORDER BY started_at DESC LIMIT ?",
             (limit,),
         )
         runs = []
         for row in cur.fetchall():
-            run_id, started_at, completed_at, status_str, test_cases_json, results_json, summary_json, error_message = row
+            run_id, started_at, completed_at, status_str, test_cases_json, results_json, summary_json, error_message, duration_seconds = row
             test_cases = []
             if test_cases_json:
                 test_cases = json.loads(test_cases_json)
@@ -177,7 +177,7 @@ def list_benchmark_runs(limit: int = 10) -> List[BenchmarkRun]:
                     results=[BenchmarkResultItem(**r) for r in results] if results else [],
                     summary=BenchmarkRunSummary(**summary) if summary else None,
                     error_message=error_message,
-                    duration_seconds=row[7] if len(row) > 7 else 10,
+                    duration_seconds=duration_seconds if duration_seconds is not None else 10,
                 )
             )
         return runs
