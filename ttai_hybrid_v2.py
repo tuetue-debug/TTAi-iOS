@@ -162,7 +162,12 @@ def select_provider(message: str, requested_model: str = "") -> ProviderInfo:
             print(f"Medium query -> Remote Ollama: {remote_ollama_providers[0].name}")
             return remote_ollama_providers[0]
     
-    # DEFAULT: Prefer Gemini Flash latest, then DeepSeek, then local Ollama
+    # DEFAULT: Prefer remote Ollama (fastest free), then Gemini Flash, then DeepSeek, then remote FastAPI
+    remote_ollama = next((p for p in PROVIDERS if p.type == "remote_ollama" and p.enabled), None)
+    if remote_ollama:
+        print(f"Default -> Remote Ollama: {remote_ollama.name}")
+        return remote_ollama
+
     api_flash = next((p for p in PROVIDERS if p.name == "gemini-flash-latest" and p.enabled), None)
     if api_flash:
         print(f"Default -> Gemini Flash: {api_flash.name}")
@@ -172,6 +177,11 @@ def select_provider(message: str, requested_model: str = "") -> ProviderInfo:
     if deepseek_provider:
         print(f"Default -> DeepSeek API: {deepseek_provider.name}")
         return deepseek_provider
+
+    remote_fastapi = next((p for p in PROVIDERS if p.type == "remote_fastapi" and p.enabled), None)
+    if remote_fastapi:
+        print(f"Default -> Remote FastAPI: {remote_fastapi.name}")
+        return remote_fastapi
 
     local_providers = [p for p in PROVIDERS if p.type == "local_ollama" and p.enabled]
     if local_providers:
