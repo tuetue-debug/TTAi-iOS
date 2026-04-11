@@ -34,6 +34,11 @@ def _ensure_db() -> None:
                 duration_seconds INTEGER DEFAULT 10
             )
         """)
+        # Add column if missing (migration)
+        try:
+            conn.execute("ALTER TABLE benchmark_runs ADD COLUMN duration_seconds INTEGER DEFAULT 10")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         conn.execute("CREATE INDEX IF NOT EXISTS idx_benchmark_runs_started_at ON benchmark_runs(started_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_benchmark_runs_status ON benchmark_runs(status)")
         conn.commit()
