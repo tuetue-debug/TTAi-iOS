@@ -1263,7 +1263,7 @@ function renderModels() {
                             </div>
                         </div>
 
-                        <div style="display:flex; flex-direction:column; gap:4px; width:380px; margin-top:4px; margin-left:418px;">
+                        <div style="display:flex; flex-direction:column; gap:4px; width:380px; margin-top:4px; margin-left:392px;">
                             <div style="width:100%; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
                             <div style="display:grid; grid-template-columns:repeat(3, 1fr); align-items:flex-start; column-gap:24px; width:100%;">
                                 <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:100%;">
