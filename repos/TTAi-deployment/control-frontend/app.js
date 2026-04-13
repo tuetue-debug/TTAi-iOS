@@ -1260,9 +1260,9 @@ function renderModels() {
                                         <div style="font-size:11px; font-weight:700; line-height:1.2;">Ollama Group</div>
                                     </div>
                                     <div style="width:0; height:18px; border-left:1px dashed rgba(148,163,184,.24);"></div>
-                                    <div style="display:flex; flex-direction:column; gap:8px; width:286px; margin-left:14px; margin-top:4px; align-self:flex-start;">
+                                    <div style="display:flex; flex-direction:column; gap:8px; width:286px; margin-left:14px; margin-top:4px; align-self:flex-start; padding:12px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.08);">
                                         <div style="display:grid; grid-template-columns:0.9fr 1.1fr; gap:14px; width:100%; align-items:start;">
-                                            <div style="display:flex; flex-direction:column; gap:8px; min-height:112px; padding:10px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12); justify-content:flex-start;">
+                                            <div style="display:flex; flex-direction:column; gap:8px; min-height:112px; padding:10px; border:none; border-radius:12px; background:rgba(15,23,42,.12); justify-content:flex-start;">
                                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                                                     <div style="font-size:11px; font-weight:700; color:#f8fafc; line-height:1.2;">Local Ollama</div>
                                                     <div style="font-size:10px; color:#94a3b8;">vannt-home-pc</div>
@@ -1280,7 +1280,7 @@ function renderModels() {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div style="display:flex; flex-direction:column; gap:8px; min-height:190px; padding:10px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12); justify-content:flex-start;">
+                                            <div style="display:flex; flex-direction:column; gap:8px; min-height:190px; padding:10px; border:none; border-radius:12px; background:rgba(15,23,42,.12); justify-content:flex-start;">
                                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; white-space:nowrap;">
                                                     <div style="font-size:11px; font-weight:700; color:#f8fafc; line-height:1.2;">Remote Ollama</div>
                                                     <div style="font-size:10px; color:#94a3b8;">${remoteOllama.host || 'vannt-work-op'}</div>
