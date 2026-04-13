@@ -1619,43 +1619,39 @@ function renderModels() {
     function updateCoreStatusLights() {
         const healthStatus = modelsData?.load_balancer_metrics?.health_status || {};
         
+        function setCoreLight(elementId, providerNames) {
+            const light = document.getElementById(elementId);
+            if (!light) return;
+            if (!providerNames || providerNames.length === 0) {
+                light.style.background = '#94a3b8';
+                return;
+            }
+            const knownProviders = providerNames.filter(name => healthStatus[name] !== undefined);
+            if (knownProviders.length === 0) {
+                light.style.background = '#94a3b8';
+                return;
+            }
+            const healthyCount = knownProviders.filter(name => healthStatus[name] === true).length;
+            if (healthyCount > 0) {
+                light.style.background = '#22c55e';
+            } else if (knownProviders.length > 0) {
+                light.style.background = '#f59e0b';
+            } else {
+                light.style.background = '#ef4444';
+            }
+        }
+
         // Core A: Ollama groups (local + remote)
-        const coreAProviders = [
+        setCoreLight('core-a-status-light', [
             'gemma3:4b-local', 'qwen3:4b-local', 'deepseek-r1:8b-local',
             'gemma4:e4b-remote', 'gemma3:4b-remote', 'deepseek-r1:8b-remote'
-        ];
-        const coreAHealthy = coreAProviders.filter(name => healthStatus[name] === true).length;
-        const coreATotal = coreAProviders.filter(name => healthStatus[name] !== undefined).length;
-        const coreALight = document.getElementById('core-a-status-light');
-        if (coreALight) {
-            if (coreATotal === 0) coreALight.style.background = '#94a3b8';
-            else if (coreAHealthy >= coreATotal * 0.5) coreALight.style.background = '#22c55e';
-            else if (coreAHealthy > 0) coreALight.style.background = '#f59e0b';
-            else coreALight.style.background = '#ef4444';
-        }
+        ]);
 
         // Core B: CLI Proxy providers
-        const coreBProviders = ['cliproxy-deepseek', 'cliproxy-gpt', 'cliproxy-gemini'];
-        const coreBHealthy = coreBProviders.filter(name => healthStatus[name] === true).length;
-        const coreBTotal = coreBProviders.filter(name => healthStatus[name] !== undefined).length;
-        const coreBLight = document.getElementById('core-b-status-light');
-        if (coreBLight) {
-            if (coreBTotal === 0) coreBLight.style.background = '#94a3b8';
-            else if (coreBHealthy >= coreBTotal * 0.5) coreBLight.style.background = '#22c55e';
-            else if (coreBHealthy > 0) coreBLight.style.background = '#f59e0b';
-            else coreBLight.style.background = '#ef4444';
-        }
+        setCoreLight('core-b-status-light', ['cliproxy-deepseek', 'cliproxy-gpt', 'cliproxy-gemini']);
 
         // Core C: GPT Direct
-        const coreCProviders = ['gpt-5.2-direct'];
-        const coreCHealthy = coreCProviders.filter(name => healthStatus[name] === true).length;
-        const coreCTotal = coreCProviders.filter(name => healthStatus[name] !== undefined).length;
-        const coreCLight = document.getElementById('core-c-status-light');
-        if (coreCLight) {
-            if (coreCTotal === 0) coreCLight.style.background = '#94a3b8';
-            else if (coreCHealthy === 1) coreCLight.style.background = '#22c55e';
-            else coreCLight.style.background = '#ef4444';
-        }
+        setCoreLight('core-c-status-light', ['gpt-5.2-direct']);
     }
 
     // Call after DOM is ready
