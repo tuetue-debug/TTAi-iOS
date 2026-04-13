@@ -1261,7 +1261,6 @@ function renderModels() {
                                     </div>
                                     <div style="width:0; height:18px; border-left:1px dashed rgba(148,163,184,.24);"></div>
                                     <div style="display:flex; flex-direction:column; gap:8px; width:286px; margin-left:14px; margin-top:4px; align-self:flex-start;">
-                                        <div style="width:calc(100% + 16px); height:0; border-top:1px dashed rgba(148,163,184,.24);"></div>
                                         <div style="display:grid; grid-template-columns:0.9fr 1.1fr; gap:14px; width:100%; align-items:start;">
                                             <div style="display:flex; flex-direction:column; gap:8px; min-height:112px; padding:10px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12); justify-content:flex-start;">
                                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
