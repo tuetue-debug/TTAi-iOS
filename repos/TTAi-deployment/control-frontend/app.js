@@ -1367,63 +1367,6 @@ function renderModels() {
         <div class="panel-grid">
             <div class="panel">
                 <div class="panel-header">
-                    <div class="panel-title">Model Readiness</div>
-                    <div class="panel-subtitle">Warmup state + actions</div>
-                </div>
-                <div class="panel-content panel-scroll-y" style="max-height: 360px;">
-                    ${models.length > 0 ? models.slice(0, 12).map(model => `
-                        <div class="panel-row panel-row-stack">
-                            <div>
-                                <div class="panel-label">${model.name}</div>
-                                <div class="panel-meta">last warmup: ${formatTimestamp(model.last_warmup ? new Date(model.last_warmup * 1000).toISOString() : null)}</div>
-                            </div>
-                            <div class="panel-actions-inline">
-                                ${renderStatusWithDot(model.status || 'unknown', model.is_ready ? 'healthy' : (String(model.status || '').toLowerCase() === 'error' ? 'unhealthy' : 'neutral'))}
-                                <button class="btn-mini" data-action="warm-model" data-target="${model.name}">Warm Up</button>
-                            </div>
-                        </div>
-                    `).join('') : '<div class="panel-row"><span class="panel-label">No model data</span><span class="panel-value">--</span></div>'}
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Provider Routing Control</div>
-                    <div class="panel-subtitle">Enable / disable live routing candidates</div>
-                </div>
-                <div class="panel-content panel-scroll-y" style="max-height: 360px;">
-                    ${providers.length > 0 ? providers.slice(0, 12).map(provider => `
-                        <div class="panel-row panel-row-stack">
-                            <div>
-                                <div class="panel-label">${provider.name}</div>
-                                <div class="panel-meta">${provider.type} · ${formatShortLabel(provider.model, 28)} · weight ${provider.weight}</div>
-                            </div>
-                            <div class="panel-actions-inline">
-                                ${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}
-                                <button class="toggle-switch ${provider.enabled ? 'is-on' : 'is-off'}" data-action="toggle-provider" data-target="${provider.name}" data-enabled="${provider.enabled ? '1' : '0'}" aria-label="Toggle provider ${provider.name}">
-                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                                </button>
-                            </div>
-                        </div>
-                    `).join('') : '<div class="panel-row"><span class="panel-label">No provider data</span><span class="panel-value">--</span></div>'}
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Provider Groups</div>
-                    <div class="panel-subtitle">Operational posture by routing class</div>
-                </div>
-                <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Local Ollama</span><span class="panel-value">${localProviders.filter(p => p.enabled).length}/${localProviders.length} enabled</span></div>
-                    <div class="panel-row"><span class="panel-label">Remote Ollama</span><span class="panel-value">${remoteProviders.filter(p => p.enabled).length}/${remoteProviders.length} enabled</span></div>
-                    <div class="panel-row"><span class="panel-label">Cloud / CLI</span><span class="panel-value">${cloudProviders.filter(p => p.enabled).length}/${cloudProviders.length} enabled</span></div>
-                    <div class="panel-row"><span class="panel-label">Control Focus</span><span class="panel-value">Use this tab to shape effective routing posture</span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
                     <div class="panel-title">Routing Posture</div>
                     <div class="panel-subtitle">Effective readiness across provider fleet</div>
                 </div>
