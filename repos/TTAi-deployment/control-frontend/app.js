@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'topology', 'about'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'proxy', 'about'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -106,7 +106,6 @@ function setActivePage(page) {
         models: 'Models',
         system: 'System',
         usage: 'Usage',
-        topology: 'Topology',
         about: 'About'
     };
     pageTitle.textContent = pageTitles[page] || 'Dashboard';
@@ -212,11 +211,11 @@ async function loadPage(page) {
             case 'usage':
                 await loadUsage();
                 break;
-            case 'topology':
-                await loadTopology();
-                break;
             case 'about':
                 renderAbout();
+                break;
+            case 'proxy':
+                await loadProxy();
                 break;
             default:
                 pageEl.innerHTML = `
@@ -396,8 +395,8 @@ async function runControlAction(action, target = null, timeout = 30) {
     });
 }
 
-async function loadControlActionHistory() {
-    const container = document.getElementById('models-actions-history');
+async function loadControlActionHistory(containerId = 'models-actions-history') {
+    const container = document.getElementById(containerId);
     if (!container) return;
 
     try {
@@ -560,16 +559,8 @@ async function listBenchmarkRuns(limit = 10) {
 // Overview page
 async function loadOverview() {
     try {
-        const [overview, proxyState, proxyBackends, proxyBenchmark] = await Promise.all([
-            fetchAPI('/control-api/overview?usage_limit=50&recent_events_limit=5'),
-            fetchAPI('/control-api/proxy/state'),
-            fetchAPI('/control-api/proxy/backends'),
-            fetchAPI('/control-api/proxy/benchmark/latest')
-        ]);
+        const overview = await fetchAPI('/control-api/overview?usage_limit=50&recent_events_limit=5');
         overviewData = overview;
-        proxyStateData = proxyState;
-        proxyBackendsData = proxyBackends;
-        proxyBenchmarkData = proxyBenchmark;
         renderOverview();
     } catch (error) {
         throw error;
@@ -579,9 +570,6 @@ async function loadOverview() {
 function renderOverview() {
     const pageEl = document.getElementById('page-overview');
     const data = overviewData;
-    const proxyState = proxyStateData || {};
-    const proxyBackends = proxyBackendsData || {};
-    const proxyBenchmark = proxyBenchmarkData || {};
     
     if (!data) return;
     
@@ -600,10 +588,6 @@ function renderOverview() {
         Object.keys(data.quota.reason_breakdown)[0] || 'N/A' : 'N/A';
     
     const recentErrors = data.alerts?.recent_errors || [];
-    const proxySummary = proxyState.summary || {};
-    const proxyRuntime = proxyState.runtime || {};
-    const proxyItems = proxyBackends.items || [];
-    const proxyBenchmarkSummary = proxyBenchmark.summary || {};
     
     pageEl.innerHTML = `
         <div class="action-bar">
@@ -702,19 +686,23 @@ function renderOverview() {
                 </div>
             </div>
             
-            <div class="panel">
+            <div class="panel panel-fixed-errors">
                 <div class="panel-header">
                     <div class="panel-title">Recent Errors</div>
                     <div class="panel-subtitle">Last 5 errors</div>
                 </div>
-                <div class="panel-content">
+                <div class="panel-content panel-scroll-y">
                     ${recentErrors.length > 0 ? 
-                        recentErrors.slice(0, 5).map(error => `
-                            <div class="panel-row">
-                                <span class="panel-label">${formatTimestamp(error.timestamp)}</span>
+                        recentErrors.slice(0, 5).map(error => {
+                            const ts = error.timestamp ? new Date(error.timestamp) : null;
+                            const timePart = ts && !Number.isNaN(ts.getTime()) ? ts.toLocaleTimeString('vi-VN') : '--';
+                            const datePart = ts && !Number.isNaN(ts.getTime()) ? ts.toLocaleDateString('vi-VN') : '--';
+                            return `
+                            <div class="panel-row panel-row-stack">
+                                <span class="panel-label recent-error-time"><span>${timePart}</span><span>${datePart}</span></span>
                                 <span class="panel-value">${error.error || error.message || error.status || 'Unknown error'}</span>
                             </div>
-                        `).join('') : 
+                        `}).join('') : 
                         `<div class="panel-row">
                             <span class="panel-label">Status</span>
                             <span class="panel-value">No recent errors</span>
@@ -723,116 +711,6 @@ function renderOverview() {
                 </div>
             </div>
 
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Proxy Status</div>
-                    <div class="panel-subtitle">8015 routing module</div>
-                </div>
-                <div class="panel-content">
-                    <div class="panel-row">
-                        <span class="panel-label">Service Status</span>
-                        <span class="panel-value">${proxySummary.service_status || 'unknown'}</span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Mode</span>
-                        <span class="panel-value">
-                            <select id="proxy-mode-select" class="input-inline">
-                                <option value="stabilize" ${proxySummary.mode === 'stabilize' ? 'selected' : ''}>stabilize</option>
-                                <option value="remote-first" ${proxySummary.mode === 'remote-first' ? 'selected' : ''}>remote-first</option>
-                                <option value="balanced-lite" ${proxySummary.mode === 'balanced-lite' ? 'selected' : ''}>balanced-lite</option>
-                                <option value="diagnostic" ${proxySummary.mode === 'diagnostic' ? 'selected' : ''}>diagnostic</option>
-                            </select>
-                        </span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Preferred Backend</span>
-                        <span class="panel-value">${proxySummary.preferred_backend || '--'}</span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Hedge</span>
-                        <span class="panel-value">
-                            <label><input type="checkbox" id="proxy-hedge-toggle" ${proxySummary.hedge_enabled ? 'checked' : ''}/> enabled</label>
-                        </span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Hedge Delay</span>
-                        <span class="panel-value"><input id="proxy-hedge-delay" class="input-inline" type="number" min="0" max="5" step="0.05" value="${proxySummary.hedge_delay_seconds ?? 0.35}" /></span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">State Source</span>
-                        <span class="panel-value">${proxyRuntime.source || '--'}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Proxy Backend Pool</div>
-                    <div class="panel-subtitle">Current routing candidates</div>
-                </div>
-                <div class="panel-content">
-                    ${proxyItems.length > 0 ? proxyItems.map(item => `
-                        <div class="panel-row">
-                            <span class="panel-label">${item.id} · ${item.role} · ${item.healthy ? 'healthy' : 'unhealthy'}</span>
-                            <span class="panel-value">
-                                <label><input type="checkbox" class="proxy-backend-toggle" data-backend-id="${item.id}" ${item.enabled ? 'checked' : ''}/> on</label>
-                                <input type="number" class="input-inline proxy-backend-weight" data-backend-id="${item.id}" min="0" max="100" step="1" value="${item.weight ?? 0}" />%
-                                <button class="btn-refresh proxy-weight-apply" data-backend-id="${item.id}">Apply</button>
-                            </span>
-                        </div>
-                    `).join('') : `
-                        <div class="panel-row">
-                            <span class="panel-label">Backends</span>
-                            <span class="panel-value">No data</span>
-                        </div>
-                    `}
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Proxy Benchmark</div>
-                    <div class="panel-subtitle">Direct vs proxy visibility</div>
-                    <button id="run-benchmark-btn" class="btn-refresh">Run Benchmark</button>
-                </div>
-                <div class="panel-content">
-                    <div class="panel-row">
-                        <span class="panel-label">Status</span>
-                        <span class="panel-value">${proxyBenchmarkSummary.status || (proxyBenchmark.available ? 'available' : 'not_run')}</span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Last Run</span>
-                        <span class="panel-value">${proxyBenchmarkSummary.last_run || '--'}</span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Overhead</span>
-                        <span class="panel-value">${proxyBenchmarkSummary.overhead_ms !== null ? proxyBenchmarkSummary.overhead_ms + ' ms' : '--'}</span>
-                    </div>
-                    <div class="panel-row">
-                        <span class="panel-label">Recommendation</span>
-                        <span class="panel-value">${proxyBenchmarkSummary.recommendation || '--'}</span>
-                    </div>
-                    <div id="benchmark-progress-container" style="display: none;">
-                        <div class="panel-row">
-                            <span class="panel-label">Progress</span>
-                            <span class="panel-value">
-                                <progress id="benchmark-progress-bar" value="0" max="1" style="width: 200px;"></progress>
-                                <span id="benchmark-progress-text">0%</span>
-                            </span>
-                        </div>
-                        <div class="panel-row">
-                            <span class="panel-label">Run ID</span>
-                            <span class="panel-value" id="benchmark-run-id">--</span>
-                        </div>
-                        <div class="panel-row">
-                            <span class="panel-label">Actions</span>
-                            <span class="panel-value">
-                                <button id="cancel-benchmark-btn" class="btn-refresh" style="margin-left: 8px;">Cancel</button>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     `;
 
@@ -859,102 +737,6 @@ function renderOverview() {
         } catch (error) {
             alert(`Warm-up failed: ${error.message}`);
         } finally {
-            btn.disabled = false;
-        }
-    });
-
-    document.getElementById('proxy-mode-select')?.addEventListener('change', async (e) => {
-        try {
-            await updateProxyMode(e.target.value);
-            await loadOverview();
-        } catch (error) {
-            alert(`Proxy mode update failed: ${error.message}`);
-        }
-    });
-
-    document.getElementById('proxy-hedge-toggle')?.addEventListener('change', async () => {
-        const enabled = document.getElementById('proxy-hedge-toggle')?.checked || false;
-        const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
-        try {
-            await updateProxyHedge(enabled, delay);
-            await loadOverview();
-        } catch (error) {
-            alert(`Proxy hedge update failed: ${error.message}`);
-        }
-    });
-
-    document.getElementById('proxy-hedge-delay')?.addEventListener('change', async () => {
-        const enabled = document.getElementById('proxy-hedge-toggle')?.checked || false;
-        const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
-        try {
-            await updateProxyHedge(enabled, delay);
-            await loadOverview();
-        } catch (error) {
-            alert(`Proxy hedge delay update failed: ${error.message}`);
-        }
-    });
-
-    document.querySelectorAll('.proxy-backend-toggle').forEach(toggle => {
-        toggle.addEventListener('change', async (e) => {
-            const backendId = e.target.getAttribute('data-backend-id');
-            try {
-                await toggleProxyBackend(backendId, e.target.checked);
-                await loadOverview();
-            } catch (error) {
-                alert(`Backend toggle failed: ${error.message}`);
-            }
-        });
-    });
-
-    document.querySelectorAll('.proxy-weight-apply').forEach(button => {
-        button.addEventListener('click', async (e) => {
-            const backendId = e.target.getAttribute('data-backend-id');
-            const input = document.querySelector(`.proxy-backend-weight[data-backend-id="${backendId}"]`);
-            const weight = parseInt(input?.value || '0', 10);
-            try {
-                await updateProxyBackendWeight(backendId, weight);
-                await loadOverview();
-            } catch (error) {
-                alert(`Backend weight update failed: ${error.message}`);
-            }
-        });
-    });
-
-    document.getElementById('run-benchmark-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('run-benchmark-btn');
-        btn.disabled = true;
-        try {
-            const result = await runProxyBenchmark();
-            document.getElementById('benchmark-run-id').textContent = result.run_id;
-            document.getElementById('benchmark-progress-container').style.display = 'block';
-            document.getElementById('benchmark-progress-bar').value = 0;
-            document.getElementById('benchmark-progress-text').textContent = '0%';
-            const interval = setInterval(async () => {
-                try {
-                    const status = await getBenchmarkStatus(result.run_id);
-                    if (!status) {
-                        clearInterval(interval);
-                        return;
-                    }
-                    document.getElementById('benchmark-progress-bar').value = status.progress;
-                    document.getElementById('benchmark-progress-text').textContent = `${Math.round(status.progress * 100)}%`;
-                    if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
-                        clearInterval(interval);
-                        btn.disabled = false;
-                        await loadOverview();
-                    }
-                } catch (err) {
-                    console.error('Benchmark status poll error:', err);
-                }
-            }, 2000);
-            document.getElementById('cancel-benchmark-btn').onclick = async () => {
-                clearInterval(interval);
-                await cancelBenchmark(result.run_id);
-                btn.disabled = false;
-                await loadOverview();
-            };
-        } catch (error) {
-            alert(`Benchmark start failed: ${error.message}`);
             btn.disabled = false;
         }
     });
@@ -1255,8 +1037,30 @@ function renderBilling() {
 // Models page
 async function loadModels() {
     try {
-        const data = await fetchAPI('/control-api/models');
-        modelsData = data;
+        const [data, usage, proxyState, proxyBackends, proxyMetrics] = await Promise.all([
+            fetchAPI('/control-api/models'),
+            fetchAPI('/control-api/usage?limit=40'),
+            fetchAPI('/control-api/proxy/state').catch(() => null),
+            fetchAPI('/control-api/proxy/backends').catch(() => null),
+            fetchAPI('/control-api/proxy/metrics').catch(() => null)
+        ]);
+        proxyStateData = proxyState;
+        proxyBackendsData = proxyBackends;
+        proxyBenchmarkData = proxyMetrics;
+        const proxySummary = proxyState?.summary || {};
+        const proxyRuntime = {
+            status: proxySummary.service_status || 'unknown',
+            healthyCount: proxySummary.healthy_backend_count ?? proxyBackends?.summary?.healthy ?? 0,
+            totalBackends: proxySummary.backend_count ?? proxyBackends?.summary?.count ?? 0,
+            backend: Array.isArray(proxyState?.runtime?.backends) && proxyState.runtime.backends.length ? String(proxyState.runtime.backends[0]).replace('http://', '') : '--',
+            hedgeEnabled: !!proxySummary.hedge_enabled,
+            hedgeDelay: proxySummary.hedge_delay_seconds ?? null,
+            tokenValidation: false,
+            requestsTotal: proxySummary.requests_total ?? proxyMetrics?.requests_total ?? 0,
+            successRate: proxySummary.success_rate ?? proxyMetrics?.success_rate ?? null,
+            avgLatency: proxySummary.avg_latency ?? proxyMetrics?.avg_latency ?? null,
+        };
+        modelsData = { ...data, recent_usage: usage, proxy_runtime: proxyRuntime };
         renderModels();
     } catch (error) {
         throw error;
@@ -1273,6 +1077,25 @@ function renderModels() {
     const providers = data.providers || [];
     const ollamaModels = data.ollama?.models || [];
     const healthStatus = data.load_balancer_metrics?.health_status || {};
+    const recentUsage = Array.isArray(data.recent_usage?.events) ? data.recent_usage.events : [];
+    const proxyRuntime = data.proxy_runtime || {};
+
+    const localProviders = providers.filter(provider => String(provider.type).includes('ollama_local'));
+    const remoteProviders = providers.filter(provider => String(provider.type).includes('ollama_remote'));
+    const cloudProviders = providers.filter(provider => String(provider.type).includes('cli_proxy'));
+    const apiRuntime = {
+        status: 'healthy',
+        role: 'canonical',
+        deploy: 'docker',
+        providers: summary.provider_count || 0,
+        enabled: summary.enabled_provider_count || 0,
+        healthy: summary.healthy_provider_count || 0,
+        bias: remoteProviders.filter(p => p.enabled).length > 0 ? 'remote-first' : 'mixed',
+        route: 'conditional'
+    };
+    const recentModelTraffic = recentUsage
+        .filter(item => item.model || item.provider || item.provider_type)
+        .slice(0, 15);
 
     pageEl.innerHTML = `
         <div class="action-bar">
@@ -1283,6 +1106,18 @@ function renderModels() {
             <button class="btn-refresh" id="models-warmup-all-btn">
                 <i class="fas fa-fire"></i>
                 Warm Up All Models
+            </button>
+            <button class="btn-refresh" id="models-enable-remote-btn">
+                <i class="fas fa-tower-broadcast"></i>
+                Enable All Remote
+            </button>
+            <button class="btn-refresh" id="models-disable-cloud-btn">
+                <i class="fas fa-cloud-slash"></i>
+                Disable All Cloud
+            </button>
+            <button class="btn-refresh" id="models-isolate-local-btn">
+                <i class="fas fa-house-signal"></i>
+                Isolate Local Only
             </button>
         </div>
 
@@ -1313,14 +1148,164 @@ function renderModels() {
             </div>
         </div>
 
+        <div class="panel-grid" style="margin-bottom: 24px;">
+            <div class="panel" style="grid-column: 1 / -1; min-height: 420px;">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">Serving Route Map</div>
+                        <div class="panel-subtitle">Serving flow map</div>
+                    </div>
+                    <div class="panel-actions-inline">
+                        <span class="status-badge status-neutral">Draft map</span>
+                    </div>
+                </div>
+                <div class="panel-content" style="padding-top: 8px; overflow-x:auto;">
+                    <div style="display:flex; flex-direction:column; gap:18px; min-width:1020px;">
+                        <div style="display:flex; align-items:flex-start; gap:10px;">
+                            <div style="display:flex; flex-direction:column; gap:7px; justify-content:flex-start; min-width:128px; padding:9px 12px; border:1px solid rgba(148,163,184,.2); border-radius:16px; background:rgba(15,23,42,.22);">
+                                <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:9px; height:9px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Health</div>
+                                <div style="font-size:15px; font-weight:700; line-height:1.1;">API</div>
+                            </div>
+                            <div style="width:18px; height:0; border-top:1px dashed rgba(148,163,184,.28); margin-top:28px;"></div>
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:8px; min-width:153px;">
+                                <div style="display:flex; flex-direction:column; gap:7px; justify-content:flex-start; width:100%; padding:9px 12px; border:1px solid rgba(148,163,184,.2); border-radius:16px; background:rgba(15,23,42,.22);">
+                                    <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:9px; height:9px; border-radius:999px; background:${proxyRuntime.status === 'healthy' || proxyRuntime.healthyCount > 0 ? '#22c55e' : '#ef4444'}; display:inline-block;"></span>Health</div>
+                                    <div style="font-size:15px; font-weight:700; line-height:1.1;">Proxy 8015</div>
+                                </div>
+                                <div style="width:0; height:3px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:7px 9px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
+                                    <div style="display:grid; grid-template-columns: 1fr auto; gap:4px 8px; font-size:10px; line-height:1.15; color:#cbd5e1;">
+                                        <span>Status</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.status || '--'}</strong>
+                                        <span>Backend</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.backend || '--'}</strong>
+                                        <span>Healthy</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.healthyCount ?? '--'}/${proxyRuntime.totalBackends ?? '--'}</strong>
+                                        <span>Hedge</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.hedgeEnabled ? 'ON' : 'OFF'}</strong>
+                                        <span>Token</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.tokenValidation ? 'ENFORCED' : 'PASS'}</strong>
+                                        <span>Req</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.requestsTotal ?? '--'}</strong>
+                                        <span>Success</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.successRate != null ? `${Math.round(proxyRuntime.successRate * 100)}%` : '--'}</strong>
+                                        <span>Lat</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${proxyRuntime.avgLatency != null ? `${proxyRuntime.avgLatency.toFixed(1)}s` : '--'}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="width:18px; height:0; border-top:1px dashed rgba(148,163,184,.28); margin-top:28px;"></div>
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:8px; min-width:162px;">
+                                <div style="display:flex; flex-direction:column; gap:7px; justify-content:flex-start; width:100%; padding:9px 12px; border:1px solid rgba(148,163,184,.2); border-radius:16px; background:rgba(15,23,42,.22);">
+                                    <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:9px; height:9px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Health</div>
+                                    <div style="font-size:15px; font-weight:700; line-height:1.1;">FastAPI 8000</div>
+                                </div>
+                                <div style="width:0; height:3px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:7px 9px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
+                                    <div style="display:grid; grid-template-columns: 1fr auto; gap:4px 8px; font-size:10px; line-height:1.15; color:#cbd5e1;">
+                                        <span>Status</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.status}</strong>
+                                        <span>Role</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.role}</strong>
+                                        <span>Deploy</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.deploy}</strong>
+                                        <span>Providers</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.providers}</strong>
+                                        <span>Enabled</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.enabled}</strong>
+                                        <span>Healthy</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.healthy}</strong>
+                                        <span>Bias</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.bias}</strong>
+                                        <span>Route</span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">${apiRuntime.route}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="width:18px; height:0; border-top:1px dashed rgba(148,163,184,.28); margin-top:28px;"></div>
+                            <div style="display:flex; flex-direction:column; gap:7px; justify-content:flex-start; min-width:153px; padding:9px 12px; border:1px dashed rgba(148,163,184,.25); border-radius:16px; background:rgba(15,23,42,.14); margin-top:0;">
+                                <div style="color:#94a3b8; font-size:11px;">policy target</div>
+                                <div style="font-size:14px; font-weight:700; line-height:1.1;">Routing Split</div>
+                            </div>
+                            <div style="width:18px; height:0; border-top:1px dashed rgba(148,163,184,.28); margin-top:28px;"></div>
+                            <div style="display:flex; flex-direction:column; gap:6px; min-width:128px; padding:9px 11px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18);">
+                                <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Health</div>
+                                <div style="font-size:13px; font-weight:700; line-height:1.1;">RAG-V2</div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:8px; padding-left:292px; margin-top:-10px; min-width:780px;">
+                            <div style="width:0; height:22px; border-left:1px dashed rgba(148,163,184,.28); margin-left:154px;"></div>
+                            <div style="width:720px; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
+                            <div style="display:grid; grid-template-columns: 160px 200px 160px 160px; gap:14px; align-items:start; width:720px;">
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; width:160px;">
+                                    <div style="width:0; height:8px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:6px; width:100%; padding:9px 11px; border:1px dashed rgba(148,163,184,.22); border-radius:14px; background:rgba(15,23,42,.12);">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Gate</div>
+                                        <div style="font-size:12px; font-weight:700; line-height:1.2;">Identity / Access / Billing</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; width:200px;">
+                                    <div style="width:0; height:8px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:6px; width:100%; padding:9px 11px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); box-shadow:0 0 0 1px rgba(34,197,94,.08) inset;">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Control Core</div>
+                                        <div style="font-size:12px; font-weight:700; line-height:1.2;">Execution Lane Orchestration</div>
+                                    </div>
+                                    <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:7px 9px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
+                                        <div style="font-size:11px; color:#94a3b8; margin-bottom:2px;">Traffic Split</div>
+                                        <div style="display:grid; grid-template-columns: auto 1fr auto; gap:6px 8px; align-items:center; font-size:10px; color:#cbd5e1;">
+                                            <span>Core A</span><span style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18);"></span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                            <span>Core B</span><span style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18);"></span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                            <span>Core C</span><span style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18);"></span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                        </div>
+                                    </div>
+                                    <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28); margin:0 auto;"></div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; width:160px;">
+                                    <div style="width:0; height:8px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:6px; width:100%; padding:9px 11px; border:1px dashed rgba(148,163,184,.22); border-radius:14px; background:rgba(15,23,42,.12);">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Truth</div>
+                                        <div style="font-size:12px; font-weight:700; line-height:1.2;">Truth / Telemetry / Metering</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:6px; width:160px;">
+                                    <div style="width:0; height:8px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:6px; width:100%; padding:9px 11px; border:1px dashed rgba(148,163,184,.22); border-radius:14px; background:rgba(15,23,42,.12);">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Adapter</div>
+                                        <div style="font-size:12px; font-weight:700; line-height:1.2;">Adapter / Control Surface</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:6px; padding-left:505px; margin-top:14px; min-width:560px;">
+                            <div style="display:flex; align-items:flex-start; gap:10px;">
+                                <div style="width:120px; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
+                                <div style="width:120px; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
+                                <div style="width:140px; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
+                            </div>
+                            <div style="display:flex; align-items:flex-start; gap:10px;">
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:120px;">
+                                    <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core A</div>
+                                        <div style="font-size:11px; font-weight:700; line-height:1.2;">Ollama Group</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:120px;">
+                                    <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core B</div>
+                                        <div style="font-size:11px; font-weight:700; line-height:1.2;">CLI Proxy API</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:140px;">
+                                    <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core C</div>
+                                        <div style="font-size:11px; font-weight:700; line-height:1.2;">Fallback (GPT 5.4)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="panel-grid">
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Model Readiness</div>
                     <div class="panel-subtitle">Warmup state + actions</div>
                 </div>
-                <div class="panel-content">
-                    ${models.length > 0 ? models.slice(0, 8).map(model => `
+                <div class="panel-content panel-scroll-y" style="max-height: 360px;">
+                    ${models.length > 0 ? models.slice(0, 12).map(model => `
                         <div class="panel-row panel-row-stack">
                             <div>
                                 <div class="panel-label">${model.name}</div>
@@ -1337,11 +1322,11 @@ function renderModels() {
 
             <div class="panel">
                 <div class="panel-header">
-                    <div class="panel-title">Provider Health</div>
-                    <div class="panel-subtitle">Load balancer backends + toggles</div>
+                    <div class="panel-title">Provider Routing Control</div>
+                    <div class="panel-subtitle">Enable / disable live routing candidates</div>
                 </div>
-                <div class="panel-content">
-                    ${providers.length > 0 ? providers.slice(0, 8).map(provider => `
+                <div class="panel-content panel-scroll-y" style="max-height: 360px;">
+                    ${providers.length > 0 ? providers.slice(0, 12).map(provider => `
                         <div class="panel-row panel-row-stack">
                             <div>
                                 <div class="panel-label">${provider.name}</div>
@@ -1350,9 +1335,7 @@ function renderModels() {
                             <div class="panel-actions-inline">
                                 ${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}
                                 <button class="toggle-switch ${provider.enabled ? 'is-on' : 'is-off'}" data-action="toggle-provider" data-target="${provider.name}" data-enabled="${provider.enabled ? '1' : '0'}" aria-label="Toggle provider ${provider.name}">
-                                    <span class="toggle-track">
-                                        <span class="toggle-thumb"></span>
-                                    </span>
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
                                 </button>
                             </div>
                         </div>
@@ -1362,11 +1345,37 @@ function renderModels() {
 
             <div class="panel">
                 <div class="panel-header">
+                    <div class="panel-title">Provider Groups</div>
+                    <div class="panel-subtitle">Operational posture by routing class</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Local Ollama</span><span class="panel-value">${localProviders.filter(p => p.enabled).length}/${localProviders.length} enabled</span></div>
+                    <div class="panel-row"><span class="panel-label">Remote Ollama</span><span class="panel-value">${remoteProviders.filter(p => p.enabled).length}/${remoteProviders.length} enabled</span></div>
+                    <div class="panel-row"><span class="panel-label">Cloud / CLI</span><span class="panel-value">${cloudProviders.filter(p => p.enabled).length}/${cloudProviders.length} enabled</span></div>
+                    <div class="panel-row"><span class="panel-label">Control Focus</span><span class="panel-value">Use this tab to shape effective routing posture</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Routing Posture</div>
+                    <div class="panel-subtitle">Effective readiness across provider fleet</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Enabled + Healthy</span><span class="panel-value">${providers.filter(p => p.enabled && p.health === 'healthy').length}</span></div>
+                    <div class="panel-row"><span class="panel-label">Enabled + Unhealthy</span><span class="panel-value">${providers.filter(p => p.enabled && p.health !== 'healthy').length}</span></div>
+                    <div class="panel-row"><span class="panel-label">Disabled + Healthy</span><span class="panel-value">${providers.filter(p => !p.enabled && p.health === 'healthy').length}</span></div>
+                    <div class="panel-row"><span class="panel-label">Disabled + Unhealthy</span><span class="panel-value">${providers.filter(p => !p.enabled && p.health !== 'healthy').length}</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
                     <div class="panel-title">Ollama Models</div>
                     <div class="panel-subtitle">Local runtime inventory</div>
                 </div>
-                <div class="panel-content">
-                    ${ollamaModels.length > 0 ? ollamaModels.slice(0, 6).map(model => `
+                <div class="panel-content panel-scroll-y" style="max-height: 360px;">
+                    ${ollamaModels.length > 0 ? ollamaModels.slice(0, 10).map(model => `
                         <div class="panel-row">
                             <span class="panel-label">${model.name}</span>
                             <span class="panel-value">${model.details?.parameter_size || '--'}</span>
@@ -1374,39 +1383,57 @@ function renderModels() {
                     `).join('') : '<div class="panel-row"><span class="panel-label">No local models</span><span class="panel-value">--</span></div>'}
                 </div>
             </div>
+
+            <div class="panel" style="grid-column: 1 / -1;">
+                <div class="panel-header">
+                    <div class="panel-title">Recent Model Traffic</div>
+                    <div class="panel-subtitle">15 recent requests across local / remote / cloud lanes</div>
+                </div>
+                <div class="panel-content panel-scroll-y" style="max-height: 380px;">
+                    ${recentModelTraffic.length > 0 ? recentModelTraffic.map(item => {
+                        const modelName = item.model || item.provider || '--';
+                        const providerType = item.provider_type || '--';
+                        const routeClass = String(providerType).includes('remote') ? 'remote' : (String(providerType).includes('local') ? 'local' : 'cloud/other');
+                        const fallbackClass = item.fallback_used ? 'fallback' : 'primary';
+                        return `<div class="panel-row"><span class="panel-label">${escapeHtml(formatTimestamp(item.timestamp))} · ${escapeHtml(String(modelName))}</span><span class="panel-value">${escapeHtml(String(providerType))} · ${routeClass} · ${fallbackClass} · ${escapeHtml(String(item.status_normalized || item.status || '--'))}</span></div>`;
+                    }).join('') : '<div class="panel-row"><span class="panel-label">No recent traffic</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
         </div>
 
-        <div class="table-container" style="margin-top: 32px;">
+        <div class="table-container table-container-scroll" style="margin-top: 32px;">
             <div class="table-header">Provider Inventory</div>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Model</th>
-                        <th>Weight</th>
-                        <th>Health</th>
-                        <th>Route</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${providers.map(provider => `
+            <div class="table-scroll-y">
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td>${provider.name}</td>
-                            <td>${provider.type}</td>
-                            <td>${provider.model}</td>
-                            <td>${provider.weight}</td>
-                            <td>${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}</td>
-                            <td>${provider.enabled ? 'ON' : 'OFF'}</td>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Model</th>
+                            <th>Weight</th>
+                            <th>Health</th>
+                            <th>Route</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${providers.map(provider => `
+                            <tr>
+                                <td>${provider.name}</td>
+                                <td>${provider.type}</td>
+                                <td>${provider.model}</td>
+                                <td>${provider.weight}</td>
+                                <td>${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}</td>
+                                <td>${provider.enabled ? 'ON' : 'OFF'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
         </div>
 
-        <div class="table-container" style="margin-top: 32px;">
+        <div class="table-container table-container-scroll" style="margin-top: 32px;">
             <div class="table-header">Recent Control Actions</div>
-            <div id="models-actions-history" class="table-loading">Loading action history...</div>
+            <div id="models-actions-history" class="table-loading table-scroll-y">Loading action history...</div>
         </div>
     `;
 
@@ -1426,6 +1453,37 @@ function renderModels() {
         } finally {
             btn.disabled = false;
         }
+    });
+
+    document.getElementById('models-enable-remote-btn')?.addEventListener('click', async () => {
+        const targets = providers.filter(p => String(p.type).includes('ollama_remote') && !p.enabled);
+        for (const provider of targets) {
+            await runControlAction('provider_enable', provider.name);
+        }
+        await loadModels();
+        alert(`Enabled ${targets.length} remote providers`);
+    });
+
+    document.getElementById('models-disable-cloud-btn')?.addEventListener('click', async () => {
+        const targets = providers.filter(p => String(p.type).includes('cli_proxy') && p.enabled);
+        for (const provider of targets) {
+            await runControlAction('provider_disable', provider.name);
+        }
+        await loadModels();
+        alert(`Disabled ${targets.length} cloud providers`);
+    });
+
+    document.getElementById('models-isolate-local-btn')?.addEventListener('click', async () => {
+        const localTargets = providers.filter(p => String(p.type).includes('ollama_local'));
+        const otherTargets = providers.filter(p => !String(p.type).includes('ollama_local'));
+        for (const provider of localTargets) {
+            if (!provider.enabled) await runControlAction('provider_enable', provider.name);
+        }
+        for (const provider of otherTargets) {
+            if (provider.enabled) await runControlAction('provider_disable', provider.name);
+        }
+        await loadModels();
+        alert('Routing posture switched to local-only');
     });
 
     pageEl.querySelectorAll('[data-action="warm-model"]').forEach(btn => {
@@ -1483,6 +1541,12 @@ function renderSystem() {
     const alerts = data.alerts?.alerts || [];
     const workloads = data.workloads || {};
     const lbSummary = workloads.load_balancer?.summary || {};
+    const surfaceHealth = [
+        { name: 'api.tuetue.vn', role: 'runtime core', status: summary.overall_status || 'unknown' },
+        { name: 'control.tuetue.vn', role: 'operator surface', status: 'healthy' },
+        { name: 'console.tuetue.vn', role: 'developer portal', status: 'unknown' },
+        { name: 'chat.tuetue.vn', role: 'product chat', status: 'unknown' }
+    ];
 
     pageEl.innerHTML = `
         <div class="toast-container" id="toast-container"></div>
@@ -1541,13 +1605,56 @@ function renderSystem() {
             </div>
         </div>
 
+        <div class="panel-grid" style="margin-bottom: 32px;">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">System Priorities</div>
+                    <div class="panel-subtitle">What this control plane should care about first</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Primary Surface</span><span class="panel-value">api.tuetue.vn runtime core</span></div>
+                    <div class="panel-row"><span class="panel-label">Operator Focus</span><span class="panel-value">control.tuetue.vn as active control plane</span></div>
+                    <div class="panel-row"><span class="panel-label">Product Surface</span><span class="panel-value">chat.tuetue.vn health and route quality</span></div>
+                    <div class="panel-row"><span class="panel-label">Developer Surface</span><span class="panel-value">console.tuetue.vn visibility and auth continuity</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Operator Domains</div>
+                    <div class="panel-subtitle">Control responsibility map</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Runtime</span><span class="panel-value">API health, routing, latency, fallback</span></div>
+                    <div class="panel-row"><span class="panel-label">Models</span><span class="panel-value">Warmup, provider posture, ollama inventory</span></div>
+                    <div class="panel-row"><span class="panel-label">Data</span><span class="panel-value">RAG docs, queues, datasets, event archives</span></div>
+                    <div class="panel-row"><span class="panel-label">Operations</span><span class="panel-value">Alerts, actions, maintenance, audit trail</span></div>
+                </div>
+            </div>
+        </div>
+
         <div class="panel-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Surface Health</div>
+                    <div class="panel-subtitle">Canonical product and control surfaces</div>
+                </div>
+                <div class="panel-content">
+                    ${surfaceHealth.map(surface => `
+                        <div class="panel-row">
+                            <span class="panel-label">${surface.name}</span>
+                            <span class="panel-value"><span class="badge ${getStatusTone(surface.status)}">${surface.status}</span> · ${surface.role}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
             <div class="panel">
                 <div class="panel-header">
                     <div class="panel-title">Node Health</div>
                     <div class="panel-subtitle">Service groups</div>
                 </div>
-                <div class="panel-content">
+                <div class="panel-content panel-scroll-y" style="max-height: 320px;">
                     ${nodes.length > 0 ? nodes.map(node => `
                         <div class="panel-row">
                             <span class="panel-label">${node.label} (${node.location})</span>
@@ -1563,10 +1670,10 @@ function renderSystem() {
                     <div class="panel-subtitle">Data + queue state</div>
                 </div>
                 <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Learn Queue</span><span class="panel-value">${workloads.learn_queue?.length ?? 0}</span></div>
+                    <div class="panel-row"><span class="panel-label">Learn Queue</span><span class="panel-value">${workloads.learn_queue?.length ?? workloads.learn_queue?.count ?? 0}</span></div>
                     <div class="panel-row"><span class="panel-label">Datasets</span><span class="panel-value">${workloads.datasets?.count ?? 0}</span></div>
                     <div class="panel-row"><span class="panel-label">Latest Dataset</span><span class="panel-value">${workloads.datasets?.latest || '--'}</span></div>
-                    <div class="panel-row"><span class="panel-label">Vector Store Docs</span><span class="panel-value">${workloads.vector_store?.document_count ?? 0}</span></div>
+                    <div class="panel-row"><span class="panel-label">Vector Store Docs</span><span class="panel-value">${workloads.vector_store?.document_count ?? workloads.rag?.document_count ?? 0}</span></div>
                 </div>
             </div>
 
@@ -1575,8 +1682,8 @@ function renderSystem() {
                     <div class="panel-title">Alerts</div>
                     <div class="panel-subtitle">Current attention items</div>
                 </div>
-                <div class="panel-content">
-                    ${alerts.length > 0 ? alerts.slice(0, 6).map(alert => `
+                <div class="panel-content panel-scroll-y" style="max-height: 320px;">
+                    ${alerts.length > 0 ? alerts.slice(0, 10).map(alert => `
                         <div class="panel-row">
                             <span class="panel-label">${alert.message || 'Alert'}</span>
                             <span class="panel-value"><span class="badge ${getStatusTone(alert.severity)}">${alert.severity || 'info'}</span></span>
@@ -1586,28 +1693,35 @@ function renderSystem() {
             </div>
         </div>
 
-        <div class="table-container" style="margin-top: 32px;">
+        <div class="table-container table-container-scroll" style="margin-top: 32px;">
             <div class="table-header">Backend Health Summary</div>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Backend</th>
-                        <th>Counts</th>
-                        <th>Avg Latency</th>
-                        <th>Last Latency</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Object.entries(lbSummary).length > 0 ? Object.entries(lbSummary).map(([backend, info]) => `
+            <div class="table-scroll-y">
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td>${backend}</td>
-                            <td>${formatKeyValuePairs(info.counts)}</td>
-                            <td>${formatLatency(info.avg_latency_ms)}</td>
-                            <td>${formatLatency(info.last_latency_ms)}</td>
+                            <th>Backend</th>
+                            <th>Counts</th>
+                            <th>Avg Latency</th>
+                            <th>Last Latency</th>
                         </tr>
-                    `).join('') : '<tr><td colspan="4">No backend activity yet</td></tr>'}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(lbSummary).length > 0 ? Object.entries(lbSummary).map(([backend, info]) => `
+                            <tr>
+                                <td>${backend}</td>
+                                <td>${formatKeyValuePairs(info.counts)}</td>
+                                <td>${formatLatency(info.avg_latency_ms)}</td>
+                                <td>${formatLatency(info.last_latency_ms)}</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="4">No backend activity yet</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="table-container table-container-scroll" style="margin-top: 32px;">
+            <div class="table-header">Recent Operator Actions</div>
+            <div id="system-actions-history" class="table-loading table-scroll-y">Loading action history...</div>
         </div>
     `;
 
@@ -1696,6 +1810,8 @@ function renderSystem() {
     pageEl.querySelectorAll('[data-nav]').forEach(btn => {
         btn.addEventListener('click', () => switchPage(btn.dataset.nav));
     });
+
+    loadControlActionHistory('system-actions-history');
 }
 
 // Toast and confirm utilities
@@ -1879,34 +1995,324 @@ function renderUsage() {
             </div>
         </div>
 
-        <div class="table-container" style="margin-top: 32px;">
+        <div class="table-container table-container-scroll" style="margin-top: 32px;">
             <div class="table-header">Recent Usage Events</div>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>User</th>
-                        <th>Provider</th>
-                        <th>Model</th>
-                        <th>Status</th>
-                        <th>Tokens</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${recentEvents.length > 0 ? recentEvents.map(event => `
+            <div class="table-scroll-y">
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td>${formatTimestamp(event.timestamp)}</td>
-                            <td>${formatShortLabel(event.user_id, 20)}</td>
-                            <td>${formatShortLabel(event.provider || event.provider_type || '--', 24)}</td>
-                            <td>${formatShortLabel(event.model, 24)}</td>
-                            <td><span class="badge ${getStatusTone(event.status_normalized || event.status)}">${event.status_normalized || event.status || '--'}</span></td>
-                            <td>${Number(event.total_tokens_est || 0).toLocaleString('en-US')}</td>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Provider</th>
+                            <th>Model</th>
+                            <th>Status</th>
+                            <th>Tokens</th>
                         </tr>
-                    `).join('') : '<tr><td colspan="6">No recent events</td></tr>'}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${recentEvents.length > 0 ? recentEvents.map(event => `
+                            <tr>
+                                <td>${formatTimestamp(event.timestamp)}</td>
+                                <td>${formatShortLabel(event.user_id, 20)}</td>
+                                <td>${formatShortLabel(event.provider || event.provider_type || '--', 24)}</td>
+                                <td>${formatShortLabel(event.model, 24)}</td>
+                                <td><span class="badge ${getStatusTone(event.status_normalized || event.status)}">${event.status_normalized || event.status || '--'}</span></td>
+                                <td>${Number(event.total_tokens_est || 0).toLocaleString('en-US')}</td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="6">No recent events</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
+}
+
+async function loadProxy() {
+    try {
+        const [proxyState, proxyBackends, proxyBenchmark, usage] = await Promise.all([
+            fetchAPI('/control-api/proxy/state'),
+            fetchAPI('/control-api/proxy/backends'),
+            fetchAPI('/control-api/proxy/benchmark/latest'),
+            fetchAPI('/control-api/usage?limit=30')
+        ]);
+
+        let proxyMetrics = null;
+        try {
+            proxyMetrics = await fetchAPI('/control-api/proxy/metrics');
+        } catch (error) {
+            proxyMetrics = null;
+        }
+
+        proxyStateData = proxyState;
+        proxyBackendsData = proxyBackends;
+        proxyBenchmarkData = proxyBenchmark;
+        renderProxy(proxyMetrics, usage);
+    } catch (error) {
+        const pageEl = document.getElementById('page-proxy');
+        if (pageEl) {
+            pageEl.innerHTML = `
+                <div class="panel-grid">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div class="panel-title">Proxy Dashboard</div>
+                            <div class="panel-subtitle">Load failed</div>
+                        </div>
+                        <div class="panel-content">
+                            <div class="panel-row"><span class="panel-label">Status</span><span class="panel-value">Error</span></div>
+                            <div class="panel-row"><span class="panel-label">Detail</span><span class="panel-value">${escapeHtml(error.message || String(error))}</span></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderProxy(proxyMetrics, usageDataPayload) {
+    const pageEl = document.getElementById('page-proxy');
+    const proxyState = proxyStateData || {};
+    const proxyBackends = proxyBackendsData || {};
+    const proxyBenchmark = proxyBenchmarkData || {};
+    const proxySummary = proxyState.summary || {};
+    const proxyRuntime = proxyState.runtime || {};
+    const proxyItems = proxyBackends.items || [];
+    const benchmarkSummary = proxyBenchmark.summary || {};
+    const usageItems = Array.isArray(usageDataPayload?.events) ? usageDataPayload.events : [];
+
+    const totalRequests = proxyMetrics?.requests_total ?? proxySummary.requests_total ?? 0;
+    const successRate = proxyMetrics?.success_rate != null ? `${(proxyMetrics.success_rate * 100).toFixed(1)}%` : '--';
+    const avgLatency = proxyMetrics?.avg_latency != null ? `${Number(proxyMetrics.avg_latency).toFixed(2)} s` : '--';
+    const uptime = proxyMetrics?.uptime_human || proxySummary.uptime_human || '--';
+    const serviceStatus = proxySummary.status || proxyRuntime.status || 'unknown';
+    const serviceTone = serviceStatus === 'healthy' ? 'good' : (serviceStatus === 'degraded' ? 'warning' : 'danger');
+    const mode = proxyRuntime.mode || proxySummary.mode || '--';
+    const hedgeEnabled = proxyRuntime.hedge?.enabled ?? proxySummary.hedge_enabled;
+    const hedgeDelay = proxyRuntime.hedge?.delay_seconds ?? proxySummary.hedge_delay_seconds;
+    const preferredBackend = proxyRuntime.preferred_backend || proxySummary.preferred_backend || '--';
+
+    const recentProxyQueries = usageItems
+        .filter(item => {
+            const providerType = String(item.provider_type || '').toLowerCase();
+            const model = String(item.model || item.provider || '').toLowerCase();
+            const requestPath = String(item.request_path || '').toLowerCase();
+            return requestPath.includes('/chat') || providerType.includes('ollama') || providerType.includes('cli') || model.includes('gemma') || model.includes('deepseek');
+        })
+        .slice(0, 15);
+
+    pageEl.innerHTML = `
+        <div class="action-bar">
+            <button class="btn-refresh" id="proxy-refresh-btn">
+                <i class="fas fa-sync-alt"></i>
+                Refresh Proxy Snapshot
+            </button>
+            <button class="btn-refresh" id="proxy-open-dashboard-btn">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+                Open Raw Proxy Dashboard
+            </button>
+            <button class="btn-refresh" id="proxy-run-benchmark-btn">
+                <i class="fas fa-stopwatch"></i>
+                Run Benchmark
+            </button>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Proxy</div>
+                <div class="kpi-title">Service Status</div>
+                <div class="kpi-value ${serviceTone}">${String(serviceStatus).toUpperCase()}</div>
+                <div class="kpi-trend"><i class="fas fa-route"></i><span>Port 8015 front door</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Traffic</div>
+                <div class="kpi-title">Total Requests</div>
+                <div class="kpi-value neutral">${totalRequests}</div>
+                <div class="kpi-trend"><i class="fas fa-chart-line"></i><span>Live proxy metrics</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Reliability</div>
+                <div class="kpi-title">Success Rate</div>
+                <div class="kpi-value neutral">${successRate}</div>
+                <div class="kpi-trend"><i class="fas fa-percent"></i><span>Observed responses</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Latency</div>
+                <div class="kpi-title">Average Response</div>
+                <div class="kpi-value neutral">${avgLatency}</div>
+                <div class="kpi-trend"><i class="fas fa-clock"></i><span>Uptime: ${uptime}</span></div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Proxy Runtime</div>
+                    <div class="panel-subtitle">Live routing state</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Mode</span><span class="panel-value"><select id="proxy-mode-select" class="input-inline"><option value="stabilize" ${mode === 'stabilize' ? 'selected' : ''}>stabilize</option><option value="remote-first" ${mode === 'remote-first' ? 'selected' : ''}>remote-first</option><option value="balanced-lite" ${mode === 'balanced-lite' ? 'selected' : ''}>balanced-lite</option><option value="diagnostic" ${mode === 'diagnostic' ? 'selected' : ''}>diagnostic</option></select></span></div>
+                    <div class="panel-row"><span class="panel-label">Preferred Backend</span><span class="panel-value">${escapeHtml(String(preferredBackend))}</span></div>
+                    <div class="panel-row"><span class="panel-label">Hedge</span><span class="panel-value"><label><input type="checkbox" id="proxy-hedge-toggle" ${hedgeEnabled ? 'checked' : ''}/> enabled</label></span></div>
+                    <div class="panel-row"><span class="panel-label">Hedge Delay</span><span class="panel-value"><input id="proxy-hedge-delay" class="input-inline" type="number" min="0" max="5" step="0.05" value="${hedgeDelay ?? 0.35}" /></span></div>
+                    <div class="panel-row"><span class="panel-label">State Source</span><span class="panel-value">${escapeHtml(String(proxySummary.state_source || proxyRuntime.state_source || '--'))}</span></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Benchmark Snapshot</div>
+                    <div class="panel-subtitle">Direct vs proxy overhead</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row"><span class="panel-label">Status</span><span class="panel-value">${escapeHtml(String(benchmarkSummary.status || (proxyBenchmark.available ? 'available' : 'not_run')))}</span></div>
+                    <div class="panel-row"><span class="panel-label">Last Run</span><span class="panel-value">${escapeHtml(String(benchmarkSummary.last_run || '--'))}</span></div>
+                    <div class="panel-row"><span class="panel-label">Overhead</span><span class="panel-value">${benchmarkSummary.overhead_ms != null ? `${Number(benchmarkSummary.overhead_ms).toFixed(2)} ms` : '--'}</span></div>
+                    <div class="panel-row"><span class="panel-label">Recommendation</span><span class="panel-value">${escapeHtml(String(benchmarkSummary.recommendation || '--'))}</span></div>
+                    <div id="benchmark-progress-container" style="display:none;">
+                        <div class="panel-row"><span class="panel-label">Progress</span><span class="panel-value"><progress id="benchmark-progress-bar" value="0" max="1" style="width: 200px;"></progress> <span id="benchmark-progress-text">0%</span></span></div>
+                        <div class="panel-row"><span class="panel-label">Run ID</span><span class="panel-value" id="benchmark-run-id">--</span></div>
+                        <div class="panel-row"><span class="panel-label">Actions</span><span class="panel-value"><button id="cancel-benchmark-btn" class="btn-refresh">Cancel</button></span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Backend Pool</div>
+                    <div class="panel-subtitle">Current routing candidates</div>
+                </div>
+                <div class="panel-content">
+                    ${proxyItems.length ? proxyItems.map(item => `
+                        <div class="panel-row">
+                            <span class="panel-label">${escapeHtml(String(item.id || item.name || 'backend'))} · ${escapeHtml(String(item.role || '--'))} · ${item.healthy ? 'healthy' : 'unhealthy'}</span>
+                            <span class="panel-value"><label><input type="checkbox" class="proxy-backend-toggle" data-backend-id="${item.id}" ${item.enabled ? 'checked' : ''}/> on</label> <input type="number" class="input-inline proxy-backend-weight" data-backend-id="${item.id}" min="0" max="100" step="1" value="${item.weight ?? 0}" />% <button class="btn-refresh proxy-weight-apply" data-backend-id="${item.id}">Apply</button></span>
+                        </div>
+                    `).join('') : `<div class="panel-row"><span class="panel-label">Backends</span><span class="panel-value">No backend data</span></div>`}
+                </div>
+            </div>
+
+            <div class="panel" style="grid-column: 1 / -1;">
+                <div class="panel-header">
+                    <div class="panel-title">Recent 15 Proxy-Relevant Queries</div>
+                    <div class="panel-subtitle">Remote vs fallback visibility from recent usage events</div>
+                </div>
+                <div class="panel-content">
+                    ${recentProxyQueries.length ? recentProxyQueries.map(item => {
+                        const providerType = String(item.provider_type || '--');
+                        const model = String(item.model || item.provider || '--');
+                        const remoteFlag = providerType.includes('remote') || model.toLowerCase().includes('remote') ? 'remote' : 'local/cloud';
+                        const fallbackFlag = item.fallback_used ? 'fallback' : 'primary';
+                        const status = item.status_normalized || item.status || '--';
+                        return `<div class="panel-row"><span class="panel-label">${escapeHtml(formatTimestamp(item.timestamp))} · ${escapeHtml(model)}</span><span class="panel-value">${escapeHtml(providerType)} · ${remoteFlag} · ${fallbackFlag} · ${escapeHtml(String(status))}</span></div>`;
+                    }).join('') : `<div class="panel-row"><span class="panel-label">Queries</span><span class="panel-value">No recent query data</span></div>`}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('proxy-refresh-btn')?.addEventListener('click', async () => {
+        await loadProxy();
+        showToast('Proxy snapshot refreshed', 'success');
+    });
+
+    document.getElementById('proxy-open-dashboard-btn')?.addEventListener('click', () => {
+        window.open('http://localhost:8015/proxy/dashboard', '_blank');
+    });
+
+    document.getElementById('proxy-run-benchmark-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('proxy-run-benchmark-btn');
+        btn.disabled = true;
+        try {
+            const result = await runProxyBenchmark();
+            document.getElementById('benchmark-run-id').textContent = result.run_id;
+            document.getElementById('benchmark-progress-container').style.display = 'block';
+            document.getElementById('benchmark-progress-bar').value = 0;
+            document.getElementById('benchmark-progress-text').textContent = '0%';
+            const interval = setInterval(async () => {
+                try {
+                    const status = await getBenchmarkStatus(result.run_id);
+                    if (!status) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    document.getElementById('benchmark-progress-bar').value = status.progress;
+                    document.getElementById('benchmark-progress-text').textContent = `${Math.round(status.progress * 100)}%`;
+                    if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+                        clearInterval(interval);
+                        btn.disabled = false;
+                        await loadProxy();
+                    }
+                } catch (err) {
+                    console.error('Benchmark status poll error:', err);
+                }
+            }, 2000);
+            document.getElementById('cancel-benchmark-btn').onclick = async () => {
+                clearInterval(interval);
+                await cancelBenchmark(result.run_id);
+                btn.disabled = false;
+                await loadProxy();
+            };
+        } catch (error) {
+            btn.disabled = false;
+            showToast('Failed to start proxy benchmark', 'error');
+        }
+    });
+
+    document.getElementById('proxy-mode-select')?.addEventListener('change', async (e) => {
+        try {
+            await updateProxyMode(e.target.value);
+            await loadProxy();
+        } catch (error) {
+            alert(`Proxy mode update failed: ${error.message}`);
+        }
+    });
+
+    document.getElementById('proxy-hedge-toggle')?.addEventListener('change', async () => {
+        const enabled = document.getElementById('proxy-hedge-toggle')?.checked || false;
+        const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
+        try {
+            await updateProxyHedge(enabled, delay);
+            await loadProxy();
+        } catch (error) {
+            alert(`Proxy hedge update failed: ${error.message}`);
+        }
+    });
+
+    document.getElementById('proxy-hedge-delay')?.addEventListener('change', async () => {
+        const enabled = document.getElementById('proxy-hedge-toggle')?.checked || false;
+        const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
+        try {
+            await updateProxyHedge(enabled, delay);
+            await loadProxy();
+        } catch (error) {
+            alert(`Proxy hedge delay update failed: ${error.message}`);
+        }
+    });
+
+    document.querySelectorAll('.proxy-backend-toggle').forEach(toggle => {
+        toggle.addEventListener('change', async (e) => {
+            const backendId = e.target.getAttribute('data-backend-id');
+            try {
+                await toggleProxyBackend(backendId, e.target.checked);
+                await loadProxy();
+            } catch (error) {
+                alert(`Backend toggle failed: ${error.message}`);
+            }
+        });
+    });
+
+    document.querySelectorAll('.proxy-weight-apply').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const backendId = e.target.getAttribute('data-backend-id');
+            const input = document.querySelector(`.proxy-backend-weight[data-backend-id="${backendId}"]`);
+            const weight = parseInt(input?.value || '0', 10);
+            try {
+                await updateProxyBackendWeight(backendId, weight);
+                await loadProxy();
+            } catch (error) {
+                alert(`Backend weight update failed: ${error.message}`);
+            }
+        });
+    });
 }
 
 function renderAbout() {
