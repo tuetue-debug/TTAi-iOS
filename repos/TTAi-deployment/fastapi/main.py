@@ -37,6 +37,15 @@ from proxy_benchmark import (
     list_benchmark_runs_response,
 )
 from proxy_control_state import set_proxy_mode, set_proxy_hedge, set_backend_enabled, set_backend_weight
+from wp_adapter_state import (
+    load_wp_adapter_state,
+    read_wp_adapter_events,
+    record_wp_adapter_event,
+    set_wp_adapter_mode,
+    set_wp_adapter_fallback,
+    set_wp_adapter_maintenance,
+    set_wp_adapter_preferred_path,
+)
 from proxy_benchmark_models import BenchmarkRunRequest
 from api_key_auth import get_api_key_identity
 
@@ -354,6 +363,11 @@ class ProxyHedgeUpdateRequest(BaseModel):
 
 class ProxyWeightUpdateRequest(BaseModel):
     weight: int = Field(ge=0, le=100)
+
+
+class TrafficSplitUpdateRequest(BaseModel):
+    core_a: int = Field(ge=0, le=100)
+    core_b: int = Field(ge=0, le=100)
 
 
 class PortalSignupRequest(BaseModel):
@@ -710,6 +724,35 @@ class PortalSocialLinkRequest(BaseModel):
     provider_email: Optional[str] = None
 
 
+class WordPressChatRequest(BaseModel):
+    message: str
+    user_id: str = "anonymous"
+    use_memory: bool = False
+    session_id: Optional[str] = None
+    site_id: Optional[str] = None
+    page_url: Optional[str] = None
+    metadata: Optional[Dict[str, str]] = None
+
+
+class WordPressChatResponse(BaseModel):
+    response: str
+    model_used: str
+    provider_type: str
+    processing_time: float
+    request_id: str
+    fallback_used: bool = False
+    adapter_mode: str
+    path_marker: str = "wp_adapter_v1"
+    route_target: Optional[str] = None
+
+
+class WordPressAdapterControlRequest(BaseModel):
+    mode: Optional[str] = None
+    fallback_enabled: Optional[bool] = None
+    maintenance_mode: Optional[bool] = None
+    preferred_path: Optional[str] = None
+
+
 @app.post("/portal-api/social-auth/link")
 async def portal_social_auth_link(payload: PortalSocialLinkRequest, portal_session: str | None = Cookie(default=None, alias=PORTAL_SESSION_COOKIE)):
     user = resolve_portal_user(portal_session)
@@ -915,6 +958,20 @@ async def chat(
     request_api_key_id = request.api_key_id or x_ttai_api_key_id
     request_tenant_id = request.tenant_id or x_ttai_tenant_id
     resolved_user_id = request.user_id or "anonymous"
+    request_path = http_request.url.path if http_request and http_request.url else "/api/chat"
+    trace_marker = (request.message or "")[:120].replace("\n", " ")
+
+    logger.info(
+        "[CHAT_TRACE] entry request_id=%s path=%s host=%s api_key_header=%s auth_bearer=%s user_hint=%s tenant_hint=%s marker=%s",
+        request_id,
+        request_path,
+        http_request.headers.get("host") if http_request else None,
+        bool(http_request.headers.get("x-api-key")) if http_request else False,
+        bool(http_request.headers.get("authorization")) if http_request else False,
+        request.user_id,
+        request_tenant_id,
+        trace_marker,
+    )
 
     api_key_identity = None
     x_api_key_value = http_request.headers.get("x-api-key")
@@ -929,6 +986,7 @@ async def chat(
             resolved_user_id = str(api_key_identity["user"].get("id"))
 
     fallback_used = False
+    fallback_reason = None
     final_status = "success"
     final_http_status = 200
     provider = None
@@ -936,8 +994,74 @@ async def chat(
     classification = None
     response_text = ""
     error_detail = None
+    initial_provider_name = None
+    initial_provider_type = None
+    initial_model = None
+    initial_endpoint = None
+
+    def resolve_route_class(current_provider_type: Optional[str]) -> str:
+        value = (current_provider_type or "").strip().lower()
+        if value == "ollama_local":
+            return "local"
+        if value == "ollama_remote":
+            return "remote"
+        if value in {"cli_proxy", "gpt_direct", "gemini", "deepseek"}:
+            return "cloud"
+        return "unknown"
     
     try:
+        direct_remote_mode = False
+        if direct_remote_mode:
+            provider = next(
+                (
+                    p for p in load_balancer.providers[ProviderType.OLLAMA_REMOTE]
+                    if p.enabled and p.model == "gemma3:4b"
+                ),
+                None,
+            )
+            if not provider:
+                raise HTTPException(status_code=503, detail="Direct remote debug provider unavailable")
+
+            provider_type = provider.provider_type.value
+            provider_base_url = provider.endpoint.rsplit("/api/", 1)[0] if "/api/" in provider.endpoint else provider.endpoint
+            result = await ollama_service.generate(
+                model=provider.model,
+                prompt=request.message,
+                stream=False,
+                base_url=provider_base_url,
+            )
+            response_text = result.get("response", "")
+            processing_time = time.time() - start_time
+            input_tokens_est = estimate_tokens(request.message)
+            output_tokens_est = estimate_tokens(response_text)
+            total_tokens_est = input_tokens_est + output_tokens_est
+            cost_info = estimate_cost(provider.model, total_tokens_est, provider_type)
+            return ChatResponse(
+                response=response_text,
+                model_used=provider.name,
+                processing_time=processing_time,
+                provider_type=provider_type,
+                classification=ClassificationResponse(
+                    complexity="simple",
+                    confidence=1.0,
+                    language="auto",
+                    needs_context=False,
+                    estimated_tokens=input_tokens_est,
+                    features={},
+                ),
+                metadata={
+                    "fallback_used": False,
+                    "request_id": request_id,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "debug_direct_remote": True,
+                    "input_tokens_est": input_tokens_est,
+                    "output_tokens_est": output_tokens_est,
+                    "total_tokens_est": total_tokens_est,
+                    "estimated_cost": cost_info["estimated_cost"],
+                    "cost_estimate_mode": cost_info["cost_estimate_mode"],
+                },
+            )
+
         # Step 1: Classify query
         classification = query_classifier.classify(request.message)
         logger.info(f"Query classified as {classification.complexity.value} "
@@ -970,6 +1094,16 @@ async def chat(
                 "provider": None,
                 "model": None,
                 "provider_type": provider_type,
+                "initial_provider": initial_provider_name,
+                "initial_model": initial_model,
+                "initial_provider_type": initial_provider_type,
+                "initial_endpoint": initial_endpoint,
+                "initial_route_class": resolve_route_class(initial_provider_type),
+                "final_provider": None,
+                "final_model": None,
+                "final_provider_type": provider_type,
+                "final_endpoint": None,
+                "final_route_class": resolve_route_class(provider_type),
                 "classification_complexity": classification.complexity.value if classification else None,
                 "classification_confidence": classification.confidence if classification else None,
                 "classification_language": classification.language if classification else None,
@@ -993,6 +1127,7 @@ async def chat(
                 "processing_time": processing_time,
                 "fallback_used": False,
                 "fallback_target": None,
+                "fallback_reason": fallback_reason,
                 "status": final_status,
                 "http_status": final_http_status,
                 "error": error_detail,
@@ -1026,7 +1161,26 @@ async def chat(
                 raise HTTPException(status_code=400, detail=f"Model {request.model} not found")
         else:
             # Auto-select based on classification
-            provider = await load_balancer.select_provider(classification)
+            provider = await load_balancer.select_provider(
+                classification,
+                request_id=request_id,
+                query=request.message
+            )
+
+        if provider:
+            initial_provider_name = provider.name
+            initial_provider_type = provider.provider_type.value
+            initial_model = provider.model
+            initial_endpoint = provider.endpoint
+            logger.info(
+                "[CHAT_TRACE] selected request_id=%s provider=%s provider_type=%s model=%s endpoint=%s complexity=%s",
+                request_id,
+                initial_provider_name,
+                initial_provider_type,
+                initial_model,
+                initial_endpoint,
+                classification.complexity.value if classification else None,
+            )
         
         # Step 4: Check if model is warm
         if not model_manager.is_model_ready(provider.name):
@@ -1040,10 +1194,19 @@ async def chat(
         if provider.provider_type.value in ["ollama_local", "ollama_remote"]:
             # Use Ollama with fallback on failure
             try:
+                provider_base_url = provider.endpoint.rsplit("/api/", 1)[0] if "/api/" in provider.endpoint else provider.endpoint
+                logger.info(
+                    "[CHAT_TRACE] ollama_exec request_id=%s provider=%s base_url=%s model=%s",
+                    request_id,
+                    provider.name,
+                    provider_base_url,
+                    provider.model,
+                )
                 result = await ollama_service.generate(
                     model=provider.model,
                     prompt=request.message,
-                    stream=False
+                    stream=False,
+                    base_url=provider_base_url,
                 )
                 response_text = result.get("response", "")
             except Exception as e:
@@ -1062,8 +1225,17 @@ async def chat(
                 if fallback_provider:
                     logger.info(f"Falling back to {fallback_provider.name}")
                     fallback_used = True
+                    fallback_reason = "provider_execution_failed"
                     provider = fallback_provider
                     provider_type = provider.provider_type.value
+                    logger.info(
+                        "[CHAT_TRACE] fallback request_id=%s fallback_provider=%s provider_type=%s endpoint=%s reason=%s",
+                        request_id,
+                        provider.name,
+                        provider_type,
+                        provider.endpoint,
+                        fallback_reason,
+                    )
                     
                     # Retry with fallback provider
                     if provider.provider_type.value == "cli_proxy":
@@ -1102,6 +1274,7 @@ async def chat(
                         # GPT direct or other providers
                         response_text = f"[{provider.name} response placeholder - Ollama fallback]"
                 else:
+                    fallback_reason = "no_healthy_fallback_available"
                     response_text = "Xin lỗi, hệ thống AI tạm thời gặp sự cố. Vui lòng thử lại sau."
             
         elif provider.provider_type.value == "cli_proxy":
@@ -1181,6 +1354,16 @@ async def chat(
             "provider": provider.name,
             "model": provider.model,
             "provider_type": provider_type,
+            "initial_provider": initial_provider_name,
+            "initial_model": initial_model,
+            "initial_provider_type": initial_provider_type,
+            "initial_endpoint": initial_endpoint,
+            "initial_route_class": resolve_route_class(initial_provider_type),
+            "final_provider": provider.name,
+            "final_model": provider.model,
+            "final_provider_type": provider_type,
+            "final_endpoint": provider.endpoint,
+            "final_route_class": resolve_route_class(provider_type),
             "classification_complexity": classification.complexity.value,
             "classification_confidence": classification.confidence,
             "classification_language": classification.language,
@@ -1199,12 +1382,25 @@ async def chat(
             "processing_time": processing_time,
             "fallback_used": fallback_used,
             "fallback_target": provider.name if fallback_used else None,
+            "fallback_reason": fallback_reason,
             "status": final_status,
             "http_status": final_http_status,
             "error": error_detail,
             "source": "repos/TTAi-deployment/fastapi/main.py"
         }
         write_usage_event(usage_event)
+        logger.info(
+            "[CHAT_TRACE] final request_id=%s path=%s final_provider=%s final_model=%s final_provider_type=%s final_endpoint=%s fallback_used=%s fallback_reason=%s latency=%.3f",
+            request_id,
+            request_path,
+            provider.name if provider else None,
+            provider.model if provider else None,
+            provider_type,
+            provider.endpoint if provider else None,
+            fallback_used,
+            fallback_reason,
+            processing_time,
+        )
         
         # Step 8: Return response
         return ChatResponse(
@@ -1241,6 +1437,16 @@ async def chat(
             "provider": provider.name if provider else None,
             "model": event_model,
             "provider_type": provider_type,
+            "initial_provider": initial_provider_name,
+            "initial_model": initial_model,
+            "initial_provider_type": initial_provider_type,
+            "initial_endpoint": initial_endpoint,
+            "initial_route_class": resolve_route_class(initial_provider_type),
+            "final_provider": provider.name if provider else None,
+            "final_model": event_model,
+            "final_provider_type": provider_type,
+            "final_endpoint": provider.endpoint if provider else None,
+            "final_route_class": resolve_route_class(provider_type),
             "classification_complexity": classification.complexity.value if classification else None,
             "classification_confidence": classification.confidence if classification else None,
             "classification_language": classification.language if classification else None,
@@ -1259,6 +1465,7 @@ async def chat(
             "processing_time": processing_time,
             "fallback_used": fallback_used,
             "fallback_target": provider.name if fallback_used and provider else None,
+            "fallback_reason": fallback_reason,
             "status": final_status,
             "http_status": final_http_status,
             "error": error_detail,
@@ -1289,6 +1496,16 @@ async def chat(
             "provider": provider.name if provider else None,
             "model": event_model,
             "provider_type": provider_type,
+            "initial_provider": initial_provider_name,
+            "initial_model": initial_model,
+            "initial_provider_type": initial_provider_type,
+            "initial_endpoint": initial_endpoint,
+            "initial_route_class": resolve_route_class(initial_provider_type),
+            "final_provider": provider.name if provider else None,
+            "final_model": event_model,
+            "final_provider_type": provider_type,
+            "final_endpoint": provider.endpoint if provider else None,
+            "final_route_class": resolve_route_class(provider_type),
             "classification_complexity": classification.complexity.value if classification else None,
             "classification_confidence": classification.confidence if classification else None,
             "classification_language": classification.language if classification else None,
@@ -1307,6 +1524,7 @@ async def chat(
             "processing_time": processing_time,
             "fallback_used": fallback_used,
             "fallback_target": provider.name if fallback_used and provider else None,
+            "fallback_reason": fallback_reason,
             "status": final_status,
             "http_status": final_http_status,
             "error": error_detail,
@@ -1315,6 +1533,140 @@ async def chat(
         write_usage_event(usage_event)
         logger.error(f"Chat processing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@app.post("/wp/chat", response_model=WordPressChatResponse)
+async def wordpress_chat(request: WordPressChatRequest, http_request: Request):
+    import time
+
+    # DEBUG LOGGING
+    logger.info(f"[WP_ADAPTER_DEBUG] Received POST to /wp/chat from {http_request.client.host if http_request.client else 'unknown'}")
+    logger.info(f"[WP_ADAPTER_DEBUG] Headers: {dict(http_request.headers)}")
+    logger.info(f"[WP_ADAPTER_DEBUG] Request body: {request}")
+    
+    start_time = time.time()
+    request_id = str(uuid.uuid4())
+    adapter_state = load_wp_adapter_state()
+    mode = adapter_state.get("mode", "stable")
+    fallback_enabled = bool(adapter_state.get("fallback_enabled", False))
+    preferred_path = adapter_state.get("preferred_path", "canonical_api_chat")
+
+    if adapter_state.get("maintenance_mode"):
+        record_wp_adapter_event({
+            "request_id": request_id,
+            "status": "maintenance",
+            "processing_time": 0,
+            "fallback_used": False,
+            "route_target": preferred_path,
+            "adapter_mode": mode,
+            "error": "maintenance_mode",
+        })
+        raise HTTPException(status_code=503, detail="WordPress adapter is in maintenance mode")
+
+    fallback_used = False
+    route_target = preferred_path
+    response_payload = None
+    error_text = None
+
+    try:
+        if preferred_path == "hybrid_8005":
+            async with httpx.AsyncClient(timeout=35) as client:
+                upstream = await client.post(
+                    "http://127.0.0.1:8005/api/chat",
+                    json={"message": request.message, "user_id": request.user_id},
+                )
+                upstream.raise_for_status()
+                data = upstream.json()
+                response_payload = {
+                    "response": data.get("response", ""),
+                    "model_used": data.get("model_used", "unknown"),
+                    "provider_type": data.get("provider_type", "unknown"),
+                    "processing_time": data.get("processing_time", time.time() - start_time),
+                }
+        else:
+            canonical_request = ChatRequest(message=request.message, user_id=request.user_id)
+            chat_result = await chat(canonical_request, http_request, None, None)
+            response_payload = {
+                "response": chat_result.response,
+                "model_used": chat_result.model_used,
+                "provider_type": chat_result.provider_type,
+                "processing_time": chat_result.processing_time,
+            }
+    except Exception as exc:
+        error_text = str(exc)
+        if fallback_enabled and preferred_path != "hybrid_8005":
+            fallback_used = True
+            route_target = "hybrid_8005"
+            async with httpx.AsyncClient(timeout=35) as client:
+                upstream = await client.post(
+                    "http://127.0.0.1:8005/api/chat",
+                    json={"message": request.message, "user_id": request.user_id},
+                )
+                upstream.raise_for_status()
+                data = upstream.json()
+                response_payload = {
+                    "response": data.get("response", ""),
+                    "model_used": data.get("model_used", "unknown"),
+                    "provider_type": data.get("provider_type", "unknown"),
+                    "processing_time": data.get("processing_time", time.time() - start_time),
+                }
+        else:
+            record_wp_adapter_event({
+                "request_id": request_id,
+                "status": "error",
+                "processing_time": time.time() - start_time,
+                "fallback_used": fallback_used,
+                "route_target": route_target,
+                "adapter_mode": mode,
+                "error": error_text,
+            })
+            raise
+
+    record_wp_adapter_event({
+        "request_id": request_id,
+        "status": "success",
+        "processing_time": response_payload["processing_time"],
+        "fallback_used": fallback_used,
+        "route_target": route_target,
+        "adapter_mode": mode,
+        "model_used": response_payload["model_used"],
+        "provider_type": response_payload["provider_type"],
+        "site_id": request.site_id,
+        "plugin_version": (request.metadata or {}).get("plugin_version") if request.metadata else None,
+        "error": error_text,
+    })
+
+    return WordPressChatResponse(
+        response=response_payload["response"],
+        model_used=response_payload["model_used"],
+        provider_type=response_payload["provider_type"],
+        processing_time=response_payload["processing_time"],
+        request_id=request_id,
+        fallback_used=fallback_used,
+        adapter_mode=mode,
+        route_target=route_target,
+    )
+
+
+@app.get("/control-api/wp-adapter")
+async def control_wp_adapter_status(current_user = Depends(get_current_control_user)):
+    state = load_wp_adapter_state()
+    state["recent_events"] = read_wp_adapter_events(limit=20)
+    return state
+
+
+@app.post("/control-api/wp-adapter/config")
+async def control_wp_adapter_config(payload: WordPressAdapterControlRequest, current_user = Depends(get_current_control_user)):
+    state = load_wp_adapter_state()
+    if payload.mode is not None:
+        state = set_wp_adapter_mode(payload.mode)
+    if payload.fallback_enabled is not None:
+        state = set_wp_adapter_fallback(payload.fallback_enabled)
+    if payload.maintenance_mode is not None:
+        state = set_wp_adapter_maintenance(payload.maintenance_mode)
+    if payload.preferred_path is not None:
+        state = set_wp_adapter_preferred_path(payload.preferred_path)
+    return state
 
 # Admin usage metering read endpoints
 @app.get("/api/admin/usage/events")
@@ -1492,6 +1844,34 @@ async def enable_provider(provider_name: str, current_user = Depends(get_current
         return {"message": f"Provider {provider_name} enabled"}
     else:
         raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
+
+@app.get("/control-api/traffic-split")
+async def control_traffic_split(current_user = Depends(get_current_control_user)):
+    split = load_balancer.get_traffic_split()
+    return {
+        **split,
+        "source": "fastapi-8000-load-balancer"
+    }
+
+@app.put("/control-api/traffic-split")
+async def control_traffic_split_update(payload: TrafficSplitUpdateRequest, current_user = Depends(get_current_control_user)):
+    try:
+        split = load_balancer.set_traffic_split(payload.core_a, payload.core_b)
+        write_control_action({
+            "timestamp": datetime.utcnow().isoformat(),
+            "kind": "traffic_split_update",
+            "core_a": split["core_a"],
+            "core_b": split["core_b"],
+            "core_c": split["core_c"],
+            "actor": getattr(current_user, "email", None) or getattr(current_user, "username", None) or "control-user"
+        })
+        return {
+            "ok": True,
+            "message": "Traffic split updated",
+            **split
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # Model Management endpoints
 @app.get("/api/models/status")
@@ -2303,6 +2683,66 @@ async def control_proxy_backends(current_user = Depends(get_current_control_user
     return await get_proxy_backends_state()
 
 
+@app.get("/control-api/proxy/metrics")
+async def control_proxy_metrics(current_user = Depends(get_current_control_user)):
+    """Fetch live metrics from proxy 8015"""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get("http://127.0.0.1:8015/proxy/metrics")
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch proxy metrics: {str(e)}")
+
+
+@app.get("/control/proxy-dashboard")
+async def control_proxy_dashboard(current_user = Depends(get_current_control_user)):
+    """Serve proxy dashboard HTML (proxied from 8015)"""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get("http://127.0.0.1:8015/proxy/dashboard")
+            response.raise_for_status()
+            # Replace localhost:8015 references with our proxy endpoint
+            html = response.text
+            html = html.replace('http://localhost:8015', '/control/proxy-api')
+            html = html.replace("fetch('/proxy/metrics')", "fetch('/control-api/proxy/metrics')")
+            return HTMLResponse(content=html)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch proxy dashboard: {str(e)}")
+
+
+@app.get("/control/proxy-api/{path:path}")
+async def control_proxy_api_proxy(path: str, request: Request, current_user = Depends(get_current_control_user)):
+    """Proxy API requests to proxy 8015"""
+    import httpx
+    url = f"http://127.0.0.1:8015/{path}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Forward the request
+            method = request.method
+            headers = dict(request.headers)
+            # Remove host header
+            headers.pop('host', None)
+            
+            if method == "GET":
+                response = await client.get(url, headers=headers, params=request.query_params)
+            elif method == "POST":
+                body = await request.body()
+                response = await client.post(url, headers=headers, content=body)
+            else:
+                raise HTTPException(status_code=405, detail="Method not allowed")
+            
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Proxy error: {str(e)}")
+
+
 @app.get("/control-api/proxy/benchmark/latest")
 async def control_proxy_benchmark_latest(current_user = Depends(get_current_control_user)):
     return get_latest_proxy_benchmark()
@@ -2336,6 +2776,105 @@ async def control_proxy_benchmark_cancel(run_id: str, current_user = Depends(get
     if not success:
         raise HTTPException(status_code=404, detail="Benchmark run not found or not cancellable")
     return {"ok": True, "message": "Benchmark cancelled"}
+
+
+@app.get("/control-api/providers/metrics")
+async def control_providers_metrics(current_user = Depends(get_current_control_user)):
+    """
+    Return provider performance metrics from hybrid service.
+    Reads from provider_metrics.jsonl in workspace.
+    """
+    import json
+    from pathlib import Path
+    from collections import Counter
+    
+    workspace_path = Path("C:/Users/vannt-pc/.openclaw/workspace")
+    metrics_file = workspace_path / "provider_metrics.jsonl"
+    
+    if not metrics_file.exists():
+        return {
+            "status": "no_data",
+            "message": "No metrics data yet",
+            "summary": {},
+            "recent": []
+        }
+    
+    # Read and parse
+    metrics = []
+    with open(metrics_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    metrics.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    
+    if not metrics:
+        return {
+            "status": "empty",
+            "message": "Metrics file empty",
+            "summary": {},
+            "recent": []
+        }
+    
+    # Summary stats
+    recent = metrics[-50:]  # last 50 entries
+    success_count = sum(1 for m in recent if m.get("status") == "success")
+    failure_count = sum(1 for m in recent if m.get("status") == "failure")
+    total = success_count + failure_count
+    
+    provider_counts = Counter(m.get("provider") for m in recent if m.get("provider"))
+    avg_latency = sum(m.get("latency", 0) for m in recent if m.get("latency")) / max(len(recent), 1)
+    
+    return {
+        "status": "ok",
+        "summary": {
+            "total_requests": total,
+            "success_rate": success_count / total if total > 0 else 0,
+            "avg_latency": avg_latency,
+            "provider_distribution": dict(provider_counts),
+        },
+        "recent": recent[-10:],  # last 10 for detail
+    }
+
+
+@app.get("/control-api/chat/providers/recent")
+async def control_chat_providers_recent(
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user = Depends(get_current_control_user)
+):
+    """Get recent provider selection events"""
+    try:
+        from .provider_telemetry import PROVIDER_TELEMETRY
+    except ImportError:
+        from provider_telemetry import PROVIDER_TELEMETRY
+    
+    events = PROVIDER_TELEMETRY.get_recent_events(limit=limit)
+    return {
+        "ok": True,
+        "count": len(events),
+        "events": events
+    }
+
+
+@app.get("/control-api/chat/providers/stats")
+async def control_chat_providers_stats(
+    hours: int = Query(default=24, ge=1, le=168),
+    current_user = Depends(get_current_control_user)
+):
+    """Get aggregated provider statistics"""
+    try:
+        from .provider_telemetry import PROVIDER_TELEMETRY
+    except ImportError:
+        from provider_telemetry import PROVIDER_TELEMETRY
+    
+    stats = PROVIDER_TELEMETRY.get_provider_stats(hours=hours)
+    return {
+        "ok": True,
+        "hours": hours,
+        "stats": stats
+    }
 
 
 @app.get("/control-api/proxy/benchmark/list")

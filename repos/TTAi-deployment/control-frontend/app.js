@@ -16,6 +16,7 @@ let topologyData = null;
 let proxyStateData = null;
 let proxyBackendsData = null;
 let proxyBenchmarkData = null;
+let trafficSplitData = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
@@ -1037,16 +1038,18 @@ function renderBilling() {
 // Models page
 async function loadModels() {
     try {
-        const [data, usage, proxyState, proxyBackends, proxyMetrics] = await Promise.all([
+        const [data, usage, proxyState, proxyBackends, proxyMetrics, trafficSplit] = await Promise.all([
             fetchAPI('/control-api/models'),
             fetchAPI('/control-api/usage?limit=40'),
             fetchAPI('/control-api/proxy/state').catch(() => null),
             fetchAPI('/control-api/proxy/backends').catch(() => null),
-            fetchAPI('/control-api/proxy/metrics').catch(() => null)
+            fetchAPI('/control-api/proxy/metrics').catch(() => null),
+            fetchAPI('/control-api/traffic-split').catch(() => null)
         ]);
         proxyStateData = proxyState;
         proxyBackendsData = proxyBackends;
         proxyBenchmarkData = proxyMetrics;
+        trafficSplitData = trafficSplit;
         const proxySummary = proxyState?.summary || {};
         const proxyRuntime = {
             status: proxySummary.service_status || 'unknown',
@@ -1072,6 +1075,7 @@ function renderModels() {
     const data = modelsData;
     if (!data) return;
 
+    const trafficSplit = trafficSplitData || { core_a: 60, core_b: 30, core_c: 10 };
     const summary = data.summary || {};
     const models = data.models || [];
     const providers = data.providers || [];
@@ -1239,9 +1243,12 @@ function renderModels() {
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:7px 9px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
                                         <div style="font-size:11px; color:#94a3b8; margin-bottom:2px;">Traffic Split</div>
                                         <div style="display:grid; grid-template-columns: auto 1fr auto; gap:6px 8px; align-items:center; font-size:10px; color:#cbd5e1;">
-                                            <span>Core A</span><span style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18);"></span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
-                                            <span>Core B</span><span style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18);"></span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
-                                            <span>Core C</span><span style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18);"></span><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                            <span>Core A</span><input id="traffic-split-core-a" type="number" min="0" max="100" value="${trafficSplit.core_a}" style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18); color:#f8fafc; padding:0 8px; width:100%;"><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                            <span>Core B</span><input id="traffic-split-core-b" type="number" min="0" max="100" value="${trafficSplit.core_b}" style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.18); color:#f8fafc; padding:0 8px; width:100%;"><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                            <span>Core C</span><input id="traffic-split-core-c" type="number" min="0" max="100" value="${trafficSplit.core_c}" readonly style="height:24px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:rgba(15,23,42,.10); color:#94a3b8; padding:0 8px; width:100%;"><strong style="font-size:10px; color:#f8fafc; font-weight:600;">%</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                            <button class="btn-mini" id="traffic-split-save">Save</button>
                                         </div>
                                     </div>
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28); margin:0 auto;"></div>
@@ -1558,6 +1565,54 @@ function renderModels() {
                 btn.disabled = false;
             }
         });
+    });
+
+    const coreAInput = document.getElementById('traffic-split-core-a');
+    const coreBInput = document.getElementById('traffic-split-core-b');
+    const coreCInput = document.getElementById('traffic-split-core-c');
+    const saveBtn = document.getElementById('traffic-split-save');
+
+    function recalcTrafficSplit() {
+        if (!coreAInput || !coreBInput || !coreCInput) return { a: 0, b: 0, c: 100 };
+        const a = Math.max(0, Math.min(100, Number(coreAInput.value || 0)));
+        const b = Math.max(0, Math.min(100, Number(coreBInput.value || 0)));
+        const c = 100 - a - b;
+        coreCInput.value = c >= 0 ? c : 0;
+        coreCInput.style.color = c >= 0 ? '#94a3b8' : '#ef4444';
+        return { a, b, c };
+    }
+
+    coreAInput?.addEventListener('input', recalcTrafficSplit);
+    coreBInput?.addEventListener('input', recalcTrafficSplit);
+    recalcTrafficSplit();
+
+    saveBtn?.addEventListener('click', async () => {
+        const { a, b, c } = recalcTrafficSplit();
+        if (c < 0) {
+            alert('Core A + Core B must be <= 100');
+            return;
+        }
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        try {
+            const result = await fetchAPI('/control-api/traffic-split', {
+                method: 'PUT',
+                body: JSON.stringify({ core_a: a, core_b: b })
+            });
+            trafficSplitData = result;
+            coreAInput.value = result.core_a;
+            coreBInput.value = result.core_b;
+            coreCInput.value = result.core_c;
+            saveBtn.textContent = 'Saved';
+            setTimeout(() => {
+                saveBtn.textContent = 'Save';
+                saveBtn.disabled = false;
+            }, 900);
+        } catch (error) {
+            alert(`Failed to update traffic split: ${error.message}`);
+            saveBtn.textContent = 'Save';
+            saveBtn.disabled = false;
+        }
     });
 
     pageEl.querySelectorAll('[data-action="toggle-provider"]').forEach(btn => {

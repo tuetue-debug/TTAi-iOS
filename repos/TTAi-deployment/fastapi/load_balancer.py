@@ -6,11 +6,23 @@ Implements 60/30/10 routing strategy
 import random
 import asyncio
 import logging
+import uuid
+import json
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
+try:
+    from .provider_telemetry import PROVIDER_TELEMETRY
+except ImportError:
+    # Fallback for direct script execution
+    from provider_telemetry import PROVIDER_TELEMETRY
+
 logger = logging.getLogger(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent
+TRAFFIC_SPLIT_STATE_PATH = BASE_DIR / "data" / "traffic_split_state.json"
 
 
 class ProviderType(Enum):
@@ -57,6 +69,8 @@ class LoadBalancer:
         self.providers = self._initialize_providers()
         self.health_status = {}
         self.request_count = {}
+        self.traffic_split = self._load_traffic_split_state()
+        self._apply_group_weights()
         self._initialize_metrics()
 
     def _normalize_provider_lookup(self, provider_name: str) -> str:
@@ -88,35 +102,57 @@ class LoadBalancer:
                     provider_type=ProviderType.OLLAMA_LOCAL,
                     endpoint="http://localhost:11434/api/generate",
                     model="gemma3:4b",
-                    weight=0.40,  # 40% of 60%
-                    timeout=30
+                    weight=0.05,
+                    timeout=30,
+                    enabled=False
                 ),
                 ProviderConfig(
                     name="qwen3:4b-local",
                     provider_type=ProviderType.OLLAMA_LOCAL,
                     endpoint="http://localhost:11434/api/generate",
                     model="qwen3:4b",
-                    weight=0.15,  # 15% of 60%
-                    timeout=45
+                    weight=0.0,
+                    timeout=45,
+                    enabled=False
                 ),
                 ProviderConfig(
                     name="deepseek-r1:8b-local",
                     provider_type=ProviderType.OLLAMA_LOCAL,
                     endpoint="http://localhost:11434/api/generate",
                     model="deepseek-r1:8b",
-                    weight=0.05,  # 5% of 60%
-                    timeout=90
+                    weight=0.0,
+                    timeout=90,
+                    enabled=False
                 )
             ],
             
             ProviderType.OLLAMA_REMOTE: [
                 ProviderConfig(
-                    name="deepseek-r1:8b-remote",
+                    name="gemma4:e4b-remote",
                     provider_type=ProviderType.OLLAMA_REMOTE,
                     endpoint="http://100.89.201.7:11434/api/generate",
+                    model="gemma4:e4b",
+                    weight=0.40,
+                    timeout=45,
+                    enabled=True
+                ),
+                ProviderConfig(
+                    name="gemma3:4b-remote",
+                    provider_type=ProviderType.OLLAMA_REMOTE,
+                    endpoint="http://100.89.201.7:11434/api/generate",
+                    model="gemma3:4b",
+                    weight=0.05,
+                    timeout=30,
+                    enabled=False
+                ),
+                ProviderConfig(
+                    name="deepseek-r1:8b-remote",
+                    provider_type=ProviderType.OLLAMA_REMOTE,
+                    endpoint="http://100.89.201.7:11435/api/generate",
                     model="deepseek-r1:8b",
-                    weight=0.20,  # 20% of 60%
-                    timeout=120
+                    weight=0.20,
+                    timeout=120,
+                    enabled=True
                 )
             ],
             
@@ -162,6 +198,67 @@ class LoadBalancer:
         logger.info(f"Initialized {sum(len(p) for p in providers.values())} providers")
         return providers
     
+    def _load_traffic_split_state(self) -> Dict[str, int]:
+        defaults = {"core_a": 60, "core_b": 30, "core_c": 10}
+        try:
+            if TRAFFIC_SPLIT_STATE_PATH.exists():
+                data = json.loads(TRAFFIC_SPLIT_STATE_PATH.read_text(encoding="utf-8"))
+                core_a = int(data.get("core_a", defaults["core_a"]))
+                core_b = int(data.get("core_b", defaults["core_b"]))
+                core_c = 100 - core_a - core_b
+                if core_a < 0 or core_b < 0 or core_c < 0:
+                    return defaults.copy()
+                return {"core_a": core_a, "core_b": core_b, "core_c": core_c}
+        except Exception as e:
+            logger.warning(f"Failed to load traffic split state: {e}")
+        return defaults.copy()
+
+    def _save_traffic_split_state(self):
+        TRAFFIC_SPLIT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        TRAFFIC_SPLIT_STATE_PATH.write_text(
+            json.dumps(self.traffic_split, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+    def _apply_group_weights(self):
+        group_targets = {
+            ProviderType.OLLAMA_LOCAL: self.traffic_split["core_a"] / 100.0,
+            ProviderType.OLLAMA_REMOTE: self.traffic_split["core_a"] / 100.0,
+            ProviderType.CLI_PROXY: self.traffic_split["core_b"] / 100.0,
+            ProviderType.GPT_DIRECT: self.traffic_split["core_c"] / 100.0,
+        }
+
+        for provider_type, provider_list in self.providers.items():
+            enabled_providers = [p for p in provider_list if p.enabled]
+            if not enabled_providers:
+                continue
+
+            target_weight = group_targets.get(provider_type, 0.0)
+            per_provider_weight = target_weight / len(enabled_providers) if enabled_providers else 0.0
+            for provider in provider_list:
+                provider.weight = per_provider_weight if provider.enabled else 0.0
+
+    def get_traffic_split(self) -> Dict[str, int]:
+        return dict(self.traffic_split)
+
+    def set_traffic_split(self, core_a: int, core_b: int) -> Dict[str, int]:
+        core_a = int(core_a)
+        core_b = int(core_b)
+        core_c = 100 - core_a - core_b
+
+        if core_a < 0 or core_b < 0 or core_c < 0:
+            raise ValueError("Traffic split must satisfy A >= 0, B >= 0, and A + B <= 100")
+
+        self.traffic_split = {
+            "core_a": core_a,
+            "core_b": core_b,
+            "core_c": core_c,
+        }
+        self._apply_group_weights()
+        self._save_traffic_split_state()
+        logger.info(f"Updated traffic split: {self.traffic_split}")
+        return self.get_traffic_split()
+
     def _initialize_metrics(self):
         """Initialize metrics tracking"""
         for provider_type, provider_list in self.providers.items():
@@ -169,7 +266,7 @@ class LoadBalancer:
                 self.request_count[provider.name] = 0
                 self.health_status[provider.name] = True
     
-    async def select_provider(self, classification: QueryClassification) -> ProviderConfig:
+    async def select_provider(self, classification: QueryClassification, request_id: str = None, query: str = "") -> ProviderConfig:
         """
         Select provider based on query classification and load balancing strategy
         
@@ -185,15 +282,21 @@ class LoadBalancer:
         """
         
         if classification.complexity == QueryComplexity.SIMPLE:
-            # Simple queries: prefer fast local models
+            # Simple queries: prefer remote Gemma 4 first, then any remote, then local fallback
             candidates = [
-                p for p in self.providers[ProviderType.OLLAMA_LOCAL] 
-                if p.model == "gemma3:4b" and p.enabled
+                p for p in self.providers[ProviderType.OLLAMA_REMOTE]
+                if p.model == "gemma4:e4b" and p.enabled
             ]
             if not candidates:
+                candidates = [
+                    p for p in self.providers[ProviderType.OLLAMA_REMOTE]
+                    if p.model == "gemma3:4b" and p.enabled
+                ]
+            if not candidates:
+                candidates = [p for p in self.providers[ProviderType.OLLAMA_REMOTE] if p.enabled]
+            if not candidates:
                 candidates = [p for p in self.providers[ProviderType.OLLAMA_LOCAL] if p.enabled]
-            
-            # Weighted random selection
+
             weights = [p.weight for p in candidates]
             selected = random.choices(candidates, weights=weights, k=1)[0]
             
@@ -256,6 +359,34 @@ class LoadBalancer:
         # Update metrics
         self.request_count[selected.name] += 1
         logger.info(f"Selected provider: {selected.name} for {classification.complexity.value} query")
+        
+        # Log provider telemetry
+        if request_id:
+            # Determine provider type for telemetry
+            provider_type = "unknown"
+            if selected.provider_type == ProviderType.OLLAMA_LOCAL:
+                provider_type = "ollama_local"
+            elif selected.provider_type == ProviderType.OLLAMA_REMOTE:
+                provider_type = "ollama_remote"
+            elif selected.provider_type == ProviderType.CLI_PROXY:
+                # CLI Proxy could be gemini, deepseek, etc.
+                if "gemini" in selected.name.lower():
+                    provider_type = "gemini"
+                elif "deepseek" in selected.name.lower():
+                    provider_type = "deepseek"
+                else:
+                    provider_type = "cli_proxy"
+            
+            # Log selection (latency will be added after response)
+            PROVIDER_TELEMETRY.log_provider_selection(
+                request_id=request_id,
+                query=query,
+                selected_provider=selected.name,
+                provider_endpoint=selected.endpoint,
+                provider_type=provider_type,
+                latency_ms=0,  # Will be updated later
+                model=selected.model
+            )
         
         # Check health and implement fallback if needed
         if not await self.check_health(selected):
