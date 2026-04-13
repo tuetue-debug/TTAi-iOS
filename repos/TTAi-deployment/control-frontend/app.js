@@ -1263,24 +1263,24 @@ function renderModels() {
                             </div>
                         </div>
 
-                        <div style="display:flex; flex-direction:column; gap:6px; padding-left:505px; margin-top:14px; min-width:560px;">
-                            <div style="width:400px; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
-                            <div style="display:flex; align-items:flex-start; gap:10px;">
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:120px;">
+                        <div style="display:flex; flex-direction:column; gap:6px; width:380px; margin-top:14px; margin-left:448px;">
+                            <div style="width:100%; height:0; border-top:1px dashed rgba(148,163,184,.28);"></div>
+                            <div style="display:grid; grid-template-columns:repeat(3, 1fr); align-items:flex-start; column-gap:24px; width:100%;">
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:100%;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
                                         <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core A</div>
                                         <div style="font-size:11px; font-weight:700; line-height:1.2;">Ollama Group</div>
                                     </div>
                                 </div>
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:120px;">
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:100%;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
                                         <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core B</div>
                                         <div style="font-size:11px; font-weight:700; line-height:1.2;">CLI Proxy API</div>
                                     </div>
                                 </div>
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:140px;">
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:2px; width:100%;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
                                         <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core C</div>
