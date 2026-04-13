@@ -370,6 +370,11 @@ class TrafficSplitUpdateRequest(BaseModel):
     core_b: int = Field(ge=0, le=100)
 
 
+class RemoteOllamaSlotUpdateRequest(BaseModel):
+    model: Optional[str] = None
+    enabled: bool = True
+
+
 class PortalSignupRequest(BaseModel):
     name: str
     email: str
@@ -1853,6 +1858,30 @@ async def control_traffic_split(current_user = Depends(get_current_control_user)
         "source": "fastapi-8000-load-balancer"
     }
 
+@app.get("/control-api/remote-ollama")
+async def control_remote_ollama(current_user = Depends(get_current_control_user)):
+    return load_balancer.get_remote_ollama_state()
+
+@app.put("/control-api/remote-ollama/slots/{port}")
+async def control_remote_ollama_slot_update(port: int, payload: RemoteOllamaSlotUpdateRequest, current_user = Depends(get_current_control_user)):
+    try:
+        state = load_balancer.update_remote_ollama_slot(port, payload.model, payload.enabled)
+        write_control_action({
+            "timestamp": datetime.utcnow().isoformat(),
+            "kind": "remote_ollama_slot_update",
+            "port": port,
+            "model": payload.model,
+            "enabled": payload.enabled,
+            "actor": getattr(current_user, "email", None) or getattr(current_user, "username", None) or "control-user"
+        })
+        return {
+            "ok": True,
+            "message": f"Remote Ollama slot {port} updated",
+            **state
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.put("/control-api/traffic-split")
 async def control_traffic_split_update(payload: TrafficSplitUpdateRequest, current_user = Depends(get_current_control_user)):
     try:
@@ -2593,6 +2622,7 @@ async def control_models(current_user = Depends(get_current_control_user)):
             "health": ollama,
             "models": ollama_models,
         },
+        "remote_ollama": load_balancer.get_remote_ollama_state(),
     }
 
 @app.get("/control-api/system")

@@ -1080,6 +1080,9 @@ function renderModels() {
     const models = data.models || [];
     const providers = data.providers || [];
     const ollamaModels = data.ollama?.models || [];
+    const remoteOllama = data.remote_ollama || { host: 'vannt-work-op', slots: [] };
+    const remoteSlot11434 = remoteOllama.slots.find(slot => Number(slot.port) === 11434) || { model: 'gemma4:e4b', enabled: true, healthy: false, warm: false, available_models: ['gemma4:e4b', 'deepseek-r1:8b', 'qwen3-vl:8b', 'gemma3:12b'] };
+    const remoteSlot11435 = remoteOllama.slots.find(slot => Number(slot.port) === 11435) || { model: null, enabled: false, healthy: false, warm: false, available_models: ['off', 'gemma4:e4b', 'qwen3-vl:8b'] };
     const healthStatus = data.load_balancer_metrics?.health_status || {};
     const recentUsage = Array.isArray(data.recent_usage?.events) ? data.recent_usage.events : [];
     const proxyRuntime = data.proxy_runtime || {};
@@ -1304,37 +1307,34 @@ function renderModels() {
                                             <div style="display:flex; flex-direction:column; gap:8px; min-height:190px; padding:10px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12); justify-content:flex-start;">
                                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; white-space:nowrap;">
                                                     <div style="font-size:11px; font-weight:700; color:#f8fafc; line-height:1.2;">Remote Ollama</div>
-                                                    <div style="font-size:10px; color:#94a3b8;">vannt-work-op</div>
+                                                    <div style="font-size:10px; color:#94a3b8;">${remoteOllama.host || 'vannt-work-op'}</div>
                                                 </div>
                                                 <div style="display:flex; flex-direction:column; gap:7px;">
                                                     <div style="display:flex; flex-direction:column; gap:5px;">
                                                         <div style="font-size:10px; color:#94a3b8;">Cổng 11434</div>
-                                                        <select style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
-                                                            <option>Gemma4:e4b</option>
-                                                            <option>deepseek-r1:8b</option>
-                                                            <option>Qwen3-vl:8b</option>
-                                                            <option>Gemma3:12b</option>
+                                                        <select id="remote-ollama-slot-11434" style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
+                                                            <option value="off" ${!remoteSlot11434.enabled || !remoteSlot11434.model ? 'selected' : ''}>off</option>
+                                                            ${remoteSlot11434.available_models.map(model => `<option value="${model}" ${remoteSlot11434.model === model && remoteSlot11434.enabled ? 'selected' : ''}>${model}</option>`).join('')}
                                                         </select>
                                                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                                            <button class="btn-mini">Warm</button>
+                                                            <button class="btn-mini" data-action="remote-ollama-save" data-port="11434">Apply</button>
                                                             <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
-                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Warm</span>
-                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Healthy</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11434-warm-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11434.warm ? '#22c55e' : '#334155'}; display:inline-block;"></span>Warm</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11434-healthy-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11434.healthy ? '#22c55e' : '#334155'}; display:inline-block;"></span>Healthy</span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                     <div style="display:flex; flex-direction:column; gap:5px;">
                                                         <div style="font-size:10px; color:#94a3b8;">Cổng 11435</div>
-                                                        <select style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
-                                                            <option>off</option>
-                                                            <option>Gemma4:e4b</option>
-                                                            <option>Qwen3-vl:8b</option>
+                                                        <select id="remote-ollama-slot-11435" style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
+                                                            <option value="off" ${!remoteSlot11435.enabled || !remoteSlot11435.model ? 'selected' : ''}>off</option>
+                                                            ${remoteSlot11435.available_models.map(model => `<option value="${model}" ${remoteSlot11435.model === model && remoteSlot11435.enabled ? 'selected' : ''}>${model}</option>`).join('')}
                                                         </select>
                                                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                                            <button class="btn-mini">Warm</button>
+                                                            <button class="btn-mini" data-action="remote-ollama-save" data-port="11435">Apply</button>
                                                             <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
-                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Warm</span>
-                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Healthy</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11435-warm-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11435.warm ? '#22c55e' : '#334155'}; display:inline-block;"></span>Warm</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11435-healthy-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11435.healthy ? '#22c55e' : '#334155'}; display:inline-block;"></span>Healthy</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1656,6 +1656,37 @@ function renderModels() {
 
     // Call after DOM is ready
     setTimeout(updateCoreStatusLights, 100);
+
+    pageEl.querySelectorAll('[data-action="remote-ollama-save"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const port = btn.dataset.port;
+            const select = document.getElementById(`remote-ollama-slot-${port}`);
+            if (!select) return;
+            const model = select.value;
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Saving...';
+            try {
+                await fetchAPI(`/control-api/remote-ollama/slots/${port}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        model: model === 'off' ? null : model,
+                        enabled: model !== 'off'
+                    })
+                });
+                btn.textContent = 'Saved';
+                await loadModels();
+            } catch (error) {
+                alert(`Failed to update remote slot ${port}: ${error.message}`);
+                btn.textContent = originalText;
+            } finally {
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }, 700);
+            }
+        });
+    });
 
     pageEl.querySelectorAll('[data-action="toggle-provider"]').forEach(btn => {
         btn.addEventListener('click', async () => {

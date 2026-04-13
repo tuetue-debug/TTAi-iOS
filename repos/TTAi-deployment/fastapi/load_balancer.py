@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 TRAFFIC_SPLIT_STATE_PATH = BASE_DIR / "data" / "traffic_split_state.json"
+REMOTE_OLLAMA_STATE_PATH = BASE_DIR / "data" / "remote_ollama_state.json"
 
 
 class ProviderType(Enum):
@@ -69,8 +70,9 @@ class LoadBalancer:
         self.providers = self._initialize_providers()
         self.health_status = {}
         self.request_count = {}
+        self.remote_ollama_state = self._load_remote_ollama_state()
         self.traffic_split = self._load_traffic_split_state()
-        self._apply_group_weights()
+        self._apply_remote_ollama_state()
         self._initialize_metrics()
 
     def _normalize_provider_lookup(self, provider_name: str) -> str:
@@ -198,6 +200,99 @@ class LoadBalancer:
         logger.info(f"Initialized {sum(len(p) for p in providers.values())} providers")
         return providers
     
+    def _load_remote_ollama_state(self) -> Dict:
+        defaults = {
+            "host": "vannt-work-op",
+            "slots": [
+                {"port": 11434, "model": "gemma4:e4b", "enabled": True},
+                {"port": 11435, "model": "deepseek-r1:8b", "enabled": True},
+            ]
+        }
+        try:
+            if REMOTE_OLLAMA_STATE_PATH.exists():
+                data = json.loads(REMOTE_OLLAMA_STATE_PATH.read_text(encoding="utf-8"))
+                slots = data.get("slots", [])
+                if isinstance(slots, list) and len(slots) == 2:
+                    return {
+                        "host": data.get("host", defaults["host"]),
+                        "slots": [
+                            {
+                                "port": int(slot.get("port", defaults["slots"][index]["port"])),
+                                "model": slot.get("model"),
+                                "enabled": bool(slot.get("enabled", True)),
+                            }
+                            for index, slot in enumerate(slots)
+                        ]
+                    }
+        except Exception as e:
+            logger.warning(f"Failed to load remote ollama state: {e}")
+        return defaults
+
+    def _save_remote_ollama_state(self):
+        REMOTE_OLLAMA_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REMOTE_OLLAMA_STATE_PATH.write_text(
+            json.dumps(self.remote_ollama_state, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+    def _apply_remote_ollama_state(self):
+        remote_slots = {slot["port"]: slot for slot in self.remote_ollama_state.get("slots", [])}
+        for provider in self.providers.get(ProviderType.OLLAMA_REMOTE, []):
+            matched_slot = None
+            for slot in remote_slots.values():
+                endpoint_port = 11434 if ":11434/" in provider.endpoint else (11435 if ":11435/" in provider.endpoint else None)
+                if endpoint_port == slot.get("port"):
+                    matched_slot = slot
+                    break
+            if not matched_slot:
+                continue
+            slot_model = matched_slot.get("model")
+            slot_enabled = matched_slot.get("enabled", False)
+            provider.enabled = bool(slot_enabled and slot_model == provider.model)
+
+        self._apply_group_weights()
+
+    def get_remote_ollama_state(self) -> Dict:
+        health = self.health_status or {}
+        slots = []
+        remote_models = [p for p in self.providers.get(ProviderType.OLLAMA_REMOTE, [])]
+        for slot in self.remote_ollama_state.get("slots", []):
+            port = slot.get("port")
+            slot_model = slot.get("model")
+            matched_provider = None
+            for provider in remote_models:
+                endpoint_port = 11434 if ":11434/" in provider.endpoint else (11435 if ":11435/" in provider.endpoint else None)
+                if endpoint_port == port and provider.model == slot_model:
+                    matched_provider = provider
+                    break
+            slots.append({
+                "port": port,
+                "model": slot_model,
+                "enabled": bool(slot.get("enabled", False)),
+                "healthy": bool(matched_provider and health.get(matched_provider.name)),
+                "warm": bool(matched_provider and health.get(matched_provider.name)),
+                "provider_name": matched_provider.name if matched_provider else None,
+                "available_models": [p.model for p in remote_models if ((11434 if ':11434/' in p.endpoint else 11435 if ':11435/' in p.endpoint else None) == port)],
+            })
+        return {
+            "host": self.remote_ollama_state.get("host", "vannt-work-op"),
+            "slots": slots,
+        }
+
+    def update_remote_ollama_slot(self, port: int, model: Optional[str], enabled: bool = True) -> Dict:
+        updated = False
+        for slot in self.remote_ollama_state.get("slots", []):
+            if int(slot.get("port")) == int(port):
+                slot["model"] = None if model in (None, "", "off") else model
+                slot["enabled"] = bool(enabled and slot["model"] is not None)
+                updated = True
+                break
+        if not updated:
+            raise ValueError(f"Remote Ollama slot {port} not found")
+        self._save_remote_ollama_state()
+        self._apply_remote_ollama_state()
+        return self.get_remote_ollama_state()
+
     def _load_traffic_split_state(self) -> Dict[str, int]:
         defaults = {"core_a": 60, "core_b": 30, "core_c": 10}
         try:
