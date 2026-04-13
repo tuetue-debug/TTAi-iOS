@@ -1272,6 +1272,52 @@ function renderModels() {
                                         <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core A</div>
                                         <div style="font-size:11px; font-weight:700; line-height:1.2;">Ollama Group</div>
                                     </div>
+                                    <div style="width:0; height:12px; border-left:1px dashed rgba(148,163,184,.24);"></div>
+                                    <div style="display:flex; flex-direction:column; gap:10px; width:188px; margin-left:0;">
+                                        <div style="display:flex; flex-direction:column; gap:8px; padding:10px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
+                                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                                <div style="font-size:11px; font-weight:700; color:#f8fafc; line-height:1.2;">Local Ollama</div>
+                                                <div style="font-size:10px; color:#94a3b8;">vannt-home-pc</div>
+                                            </div>
+                                            <select style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
+                                                <option>off</option>
+                                                <option>Gemma3:4b</option>
+                                                <option>Qwen3-vl:4b</option>
+                                            </select>
+                                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                                <button class="btn-mini">Warm</button>
+                                                <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
+                                                    <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Warm</span>
+                                                    <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Healthy</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex; flex-direction:column; gap:8px; padding:10px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
+                                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                                <div style="font-size:11px; font-weight:700; color:#f8fafc; line-height:1.2;">Remote Ollama</div>
+                                                <div style="font-size:10px; color:#94a3b8;">vannt-work-op</div>
+                                            </div>
+                                            <div style="display:flex; flex-direction:column; gap:7px;">
+                                                <div style="display:flex; flex-direction:column; gap:5px;">
+                                                    <div style="font-size:10px; color:#94a3b8;">Cổng 11434</div>
+                                                    <select style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
+                                                        <option>Gemma4:e4b</option>
+                                                        <option>deepseek-r1:8b</option>
+                                                        <option>Qwen3-vl:8b</option>
+                                                        <option>Gemma3:12b</option>
+                                                    </select>
+                                                </div>
+                                                <div style="display:flex; flex-direction:column; gap:5px;">
+                                                    <div style="font-size:10px; color:#94a3b8;">Cổng 11435</div>
+                                                    <select style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
+                                                        <option>off</option>
+                                                        <option>Gemma4:e4b</option>
+                                                        <option>Qwen3-vl:8b</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:100%;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
