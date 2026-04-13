@@ -1110,14 +1110,6 @@ function renderModels() {
                 <i class="fas fa-rotate"></i>
                 Refresh Models View
             </button>
-            <button class="btn-refresh" id="models-warmup-all-btn">
-                <i class="fas fa-fire"></i>
-                Warm Up All Models
-            </button>
-            <button class="btn-refresh" id="models-enable-remote-btn">
-                <i class="fas fa-tower-broadcast"></i>
-                Enable All Remote
-            </button>
             <button class="btn-refresh" id="models-disable-cloud-btn">
                 <i class="fas fa-cloud-slash"></i>
                 Disable All Cloud
@@ -1420,29 +1412,6 @@ function renderModels() {
 
     document.getElementById('models-refresh-actions-btn')?.addEventListener('click', async () => {
         await loadModels();
-    });
-
-    document.getElementById('models-warmup-all-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('models-warmup-all-btn');
-        btn.disabled = true;
-        try {
-            const result = await runControlAction('model_warmup_all', null, 20);
-            alert(result.message || 'Warm-up completed');
-            await loadModels();
-        } catch (error) {
-            alert(`Warm-up failed: ${error.message}`);
-        } finally {
-            btn.disabled = false;
-        }
-    });
-
-    document.getElementById('models-enable-remote-btn')?.addEventListener('click', async () => {
-        const targets = providers.filter(p => String(p.type).includes('ollama_remote') && !p.enabled);
-        for (const provider of targets) {
-            await runControlAction('provider_enable', provider.name);
-        }
-        await loadModels();
-        alert(`Enabled ${targets.length} remote providers`);
     });
 
     document.getElementById('models-disable-cloud-btn')?.addEventListener('click', async () => {
