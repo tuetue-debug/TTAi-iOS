@@ -1105,21 +1105,6 @@ function renderModels() {
         .slice(0, 15);
 
     pageEl.innerHTML = `
-        <div class="action-bar">
-            <button class="btn-refresh" id="models-refresh-actions-btn">
-                <i class="fas fa-rotate"></i>
-                Refresh Models View
-            </button>
-            <button class="btn-refresh" id="models-disable-cloud-btn">
-                <i class="fas fa-cloud-slash"></i>
-                Disable All Cloud
-            </button>
-            <button class="btn-refresh" id="models-isolate-local-btn">
-                <i class="fas fa-house-signal"></i>
-                Isolate Local Only
-            </button>
-        </div>
-
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Models</div>
@@ -1409,32 +1394,6 @@ function renderModels() {
             <div id="models-actions-history" class="table-loading table-scroll-y">Loading action history...</div>
         </div>
     `;
-
-    document.getElementById('models-refresh-actions-btn')?.addEventListener('click', async () => {
-        await loadModels();
-    });
-
-    document.getElementById('models-disable-cloud-btn')?.addEventListener('click', async () => {
-        const targets = providers.filter(p => String(p.type).includes('cli_proxy') && p.enabled);
-        for (const provider of targets) {
-            await runControlAction('provider_disable', provider.name);
-        }
-        await loadModels();
-        alert(`Disabled ${targets.length} cloud providers`);
-    });
-
-    document.getElementById('models-isolate-local-btn')?.addEventListener('click', async () => {
-        const localTargets = providers.filter(p => String(p.type).includes('ollama_local'));
-        const otherTargets = providers.filter(p => !String(p.type).includes('ollama_local'));
-        for (const provider of localTargets) {
-            if (!provider.enabled) await runControlAction('provider_enable', provider.name);
-        }
-        for (const provider of otherTargets) {
-            if (provider.enabled) await runControlAction('provider_disable', provider.name);
-        }
-        await loadModels();
-        alert('Routing posture switched to local-only');
-    });
 
     pageEl.querySelectorAll('[data-action="warm-model"]').forEach(btn => {
         btn.addEventListener('click', async () => {
