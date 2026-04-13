@@ -1084,7 +1084,7 @@ function renderModels() {
     const remoteSlot11434 = remoteOllama.slots.find(slot => Number(slot.port) === 11434) || { model: 'gemma4:e4b', enabled: true, healthy: false, warm: false, available_models: ['gemma4:e4b', 'deepseek-r1:8b', 'qwen3-vl:8b', 'gemma3:12b'] };
     const remoteSlot11435 = remoteOllama.slots.find(slot => Number(slot.port) === 11435) || { model: null, enabled: false, healthy: false, warm: false, available_models: ['off', 'gemma4:e4b', 'qwen3-vl:8b'] };
     const healthStatus = data.load_balancer_metrics?.health_status || {};
-    const recentUsage = Array.isArray(data.recent_usage?.events) ? data.recent_usage.events : [];
+    const recentUsage = Array.isArray(data.recent_usage?.recent_events) ? data.recent_usage.recent_events : (Array.isArray(data.recent_usage?.events) ? data.recent_usage.events : []);
     const proxyRuntime = data.proxy_runtime || {};
 
     const localProviders = providers.filter(provider => String(provider.type).includes('ollama_local'));
