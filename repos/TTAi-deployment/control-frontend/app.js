@@ -1308,6 +1308,13 @@ function renderModels() {
                                                             <option>Qwen3-vl:8b</option>
                                                             <option>Gemma3:12b</option>
                                                         </select>
+                                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                                            <button class="btn-mini">Warm</button>
+                                                            <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Warm</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Healthy</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                     <div style="display:flex; flex-direction:column; gap:5px;">
                                                         <div style="font-size:10px; color:#94a3b8;">Cổng 11435</div>
@@ -1316,6 +1323,13 @@ function renderModels() {
                                                             <option>Gemma4:e4b</option>
                                                             <option>Qwen3-vl:8b</option>
                                                         </select>
+                                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                                            <button class="btn-mini">Warm</button>
+                                                            <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Warm</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Healthy</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
