@@ -1365,34 +1365,6 @@ function renderModels() {
         </div>
 
         <div class="panel-grid">
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Routing Posture</div>
-                    <div class="panel-subtitle">Effective readiness across provider fleet</div>
-                </div>
-                <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Enabled + Healthy</span><span class="panel-value">${providers.filter(p => p.enabled && p.health === 'healthy').length}</span></div>
-                    <div class="panel-row"><span class="panel-label">Enabled + Unhealthy</span><span class="panel-value">${providers.filter(p => p.enabled && p.health !== 'healthy').length}</span></div>
-                    <div class="panel-row"><span class="panel-label">Disabled + Healthy</span><span class="panel-value">${providers.filter(p => !p.enabled && p.health === 'healthy').length}</span></div>
-                    <div class="panel-row"><span class="panel-label">Disabled + Unhealthy</span><span class="panel-value">${providers.filter(p => !p.enabled && p.health !== 'healthy').length}</span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Ollama Models</div>
-                    <div class="panel-subtitle">Local runtime inventory</div>
-                </div>
-                <div class="panel-content panel-scroll-y" style="max-height: 360px;">
-                    ${ollamaModels.length > 0 ? ollamaModels.slice(0, 10).map(model => `
-                        <div class="panel-row">
-                            <span class="panel-label">${model.name}</span>
-                            <span class="panel-value">${model.details?.parameter_size || '--'}</span>
-                        </div>
-                    `).join('') : '<div class="panel-row"><span class="panel-label">No local models</span><span class="panel-value">--</span></div>'}
-                </div>
-            </div>
-
             <div class="panel" style="grid-column: 1 / -1;">
                 <div class="panel-header">
                     <div class="panel-title">Recent Model Traffic</div>
