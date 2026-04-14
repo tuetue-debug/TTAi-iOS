@@ -807,6 +807,12 @@ class OllamaChatRequest(BaseModel):
     model: str = "gemma3:4b"
     stream: bool = False
 
+class OllamaEmbedRequest(BaseModel):
+    model: str = "nomic-embed-text:latest"
+    text: Optional[str] = None
+    input: Optional[List[str] | str] = None
+    base_url: Optional[str] = None
+
 class ModelInfo(BaseModel):
     name: str
     model: str
@@ -856,6 +862,7 @@ API_V1_OLLAMA_MODELS = "/api/v1/ollama/models"
 API_V1_OLLAMA_HEALTH = "/api/v1/ollama/health"
 API_V1_OLLAMA_GENERATE = "/api/v1/ollama/generate"
 API_V1_OLLAMA_CHAT = "/api/v1/ollama/chat"
+API_V1_OLLAMA_EMBED = "/api/v1/ollama/embed"
 API_V1_HYBRID_CHAT = "/api/v1/hybrid/chat"
 API_V1_TEST_CLASSIFICATION = "/api/v1/test/classification"
 API_V1_TEST_LOADBALANCER = "/api/v1/test/loadbalancer"
@@ -2019,6 +2026,27 @@ async def ollama_chat(request: OllamaChatRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ollama chat failed: {str(e)}")
+
+@app.post("/api/ollama/embed")
+@app.post(API_V1_OLLAMA_EMBED)
+async def ollama_embed(request: OllamaEmbedRequest):
+    """Embedding endpoint using Ollama for local/control-plane integrations."""
+    input_data = request.input if request.input is not None else request.text
+    if input_data is None:
+        raise HTTPException(status_code=400, detail="Either 'text' or 'input' is required")
+
+    try:
+        result = await ollama_service.embed(
+            model=request.model,
+            text=request.text,
+            input_data=input_data,
+            base_url=request.base_url,
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ollama embed failed: {str(e)}")
 
 # Legacy hybrid endpoint (backward compatibility)
 @app.post("/api/hybrid/chat", response_model=ChatResponse)
