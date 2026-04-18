@@ -375,6 +375,14 @@ class RemoteOllamaSlotUpdateRequest(BaseModel):
     enabled: bool = True
 
 
+class EmbeddingStatusResponse(BaseModel):
+    provider: str
+    model: str
+    healthy: bool
+    last_check: Optional[str] = None
+    fallback: Optional[str] = None
+
+
 class PortalSignupRequest(BaseModel):
     name: str
     email: str
@@ -811,6 +819,7 @@ class OllamaEmbedRequest(BaseModel):
     model: str = "nomic-embed-text:latest"
     text: Optional[str] = None
     input: Optional[List[str] | str] = None
+    prompt: Optional[str] = None
     base_url: Optional[str] = None
 
 class ModelInfo(BaseModel):
@@ -1869,6 +1878,29 @@ async def control_traffic_split(current_user = Depends(get_current_control_user)
 async def control_remote_ollama(current_user = Depends(get_current_control_user)):
     return load_balancer.get_remote_ollama_state()
 
+@app.get("/control-api/embedding-status", response_model=EmbeddingStatusResponse)
+async def control_embedding_status(current_user = Depends(get_current_control_user)):
+    """Get embedding provider status (OpenClaw memory search integration)"""
+    try:
+        # Test embedding endpoint
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "http://127.0.0.1:8000/api/embeddings",
+                json={"model": "nomic-embed-text:latest", "prompt": "health check"},
+                headers={"Content-Type": "application/json"}
+            )
+            healthy = resp.status_code == 200
+    except Exception:
+        healthy = False
+    
+    return EmbeddingStatusResponse(
+        provider="ollama",
+        model="nomic-embed-text:latest",
+        healthy=healthy,
+        last_check=datetime.utcnow().isoformat(),
+        fallback="openai"
+    )
+
 @app.put("/control-api/remote-ollama/slots/{port}")
 async def control_remote_ollama_slot_update(port: int, payload: RemoteOllamaSlotUpdateRequest, current_user = Depends(get_current_control_user)):
     try:
@@ -2033,12 +2065,14 @@ async def ollama_embed(request: OllamaEmbedRequest):
     """Embedding endpoint using Ollama for local/control-plane integrations."""
     input_data = request.input if request.input is not None else request.text
     if input_data is None:
-        raise HTTPException(status_code=400, detail="Either 'text' or 'input' is required")
+        input_data = request.prompt
+    if input_data is None:
+        raise HTTPException(status_code=400, detail="One of 'text', 'input', or 'prompt' is required")
 
     try:
         result = await ollama_service.embed(
             model=request.model,
-            text=request.text,
+            text=request.text or request.prompt,
             input_data=input_data,
             base_url=request.base_url,
         )
@@ -2048,14 +2082,47 @@ async def ollama_embed(request: OllamaEmbedRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ollama embed failed: {str(e)}")
 
+@app.post("/api/embeddings")
+@app.post("/api/v1/embeddings")
+async def ollama_embeddings_compat(request: OllamaEmbedRequest):
+    """OpenClaw/Ollama-compatible embeddings endpoint returning embedding[] singular."""
+    # Determine input text
+    input_text = request.prompt
+    if input_text is None:
+        input_text = request.text
+    if input_text is None and request.input is not None:
+        # If input is a list, take first item
+        if isinstance(request.input, list) and len(request.input) > 0:
+            input_text = request.input[0]
+        else:
+            input_text = request.input
+    if input_text is None:
+        raise HTTPException(status_code=400, detail="One of 'text', 'input', or 'prompt' is required")
+
+    try:
+        result = await ollama_service.embed(
+            model=request.model,
+            text=input_text,
+            input_data=input_text,
+            base_url=request.base_url,
+        )
+        embeddings = result.get("embeddings") or []
+        if not embeddings:
+            raise HTTPException(status_code=500, detail="Embedding response missing embeddings[]")
+        return {"embedding": embeddings[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ollama embeddings compat failed: {str(e)}")
+
 # Legacy hybrid endpoint (backward compatibility)
 @app.post("/api/hybrid/chat", response_model=ChatResponse)
 @app.post(API_V1_HYBRID_CHAT, response_model=ChatResponse)
-async def hybrid_chat(request: ChatRequest):
+async def hybrid_chat(request: ChatRequest, http_request: Request):
     """
     Legacy hybrid endpoint - uses new load balancing system
     """
-    return await chat(request)
+    return await chat(request, http_request)
 
 # Test endpoints
 @app.get("/api/test/classification")
@@ -2600,12 +2667,19 @@ async def control_errors(
 
 @app.get("/control-api/models")
 async def control_models(current_user = Depends(get_current_control_user)):
-    models_status = await get_models_status()
-    lb_providers = await get_providers()
-    lb_metrics = await get_loadbalancer_metrics()
-    ollama = await ollama_health()
-    ollama_models_resp = await get_ollama_models()
-    collector_model_status = await collector_service.models()
+    async def safe_call(coro, default):
+        try:
+            return await coro
+        except BaseException as e:
+            logger.error(f"control_models dependency failed: {type(e).__name__}: {e}")
+            return default
+
+    models_status = await safe_call(get_models_status(), {})
+    lb_providers = await safe_call(get_providers(), {"providers": []})
+    lb_metrics = await safe_call(get_loadbalancer_metrics(), {})
+    ollama = await safe_call(ollama_health(), {"status": "unhealthy", "service": "ollama"})
+    ollama_models_resp = await safe_call(get_ollama_models(), {"models": []})
+    collector_model_status = await safe_call(collector_service.models(), {})
 
     models_list = list(models_status.values()) if isinstance(models_status, dict) else []
     provider_list = lb_providers.get("providers", []) if isinstance(lb_providers, dict) else []
@@ -2622,6 +2696,43 @@ async def control_models(current_user = Depends(get_current_control_user)):
         }
         for provider in provider_list
     ]
+
+    remote_ollama = load_balancer.get_remote_ollama_state()
+    remote_slots = list((remote_ollama or {}).get("slots", []))
+    if remote_slots:
+        primary = remote_slots[0]
+        available_models = [m.get("name") for m in ollama_models if isinstance(m, dict) and m.get("name")]
+        if not available_models:
+            fallback_models = []
+            try:
+                remote_gpu = MODELS_REGISTRY.get("remote-gpu", {}) if isinstance(MODELS_REGISTRY, dict) else {}
+                fallback_models = [m.get("id") for m in remote_gpu.get("models", []) if isinstance(m, dict) and m.get("id")]
+            except Exception:
+                fallback_models = []
+            if not fallback_models:
+                fallback_models = ["gemma4:e4b", "deepseek-r1:8b", "qwen3-vl:8b", "gemma3:12b"]
+            available_models = fallback_models
+        legacy_slots = [
+            {
+                "port": 11434,
+                "model": primary.get("model"),
+                "enabled": primary.get("enabled", True),
+                "healthy": ollama.get("status") == "healthy",
+                "warm": any(m.get("is_ready") for m in models_list),
+                "available_models": available_models,
+                "backing_port": primary.get("port"),
+            },
+            {
+                "port": 11435,
+                "model": remote_slots[1].get("model") if len(remote_slots) > 1 else None,
+                "enabled": remote_slots[1].get("enabled", False) if len(remote_slots) > 1 else False,
+                "healthy": ollama.get("status") == "healthy",
+                "warm": any(m.get("is_ready") for m in models_list),
+                "available_models": ["off"] + available_models,
+                "backing_port": remote_slots[1].get("port") if len(remote_slots) > 1 else primary.get("port"),
+            }
+        ]
+        remote_ollama = {**remote_ollama, "slots": legacy_slots}
 
     warm_count = sum(1 for m in models_list if m.get("is_ready"))
     error_count = sum(1 for m in models_list if m.get("status") == "error")
@@ -2650,7 +2761,7 @@ async def control_models(current_user = Depends(get_current_control_user)):
             "health": ollama,
             "models": ollama_models,
         },
-        "remote_ollama": load_balancer.get_remote_ollama_state(),
+        "remote_ollama": remote_ollama,
     }
 
 @app.get("/control-api/system")

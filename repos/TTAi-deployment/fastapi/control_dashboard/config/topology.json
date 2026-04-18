@@ -38,9 +38,9 @@
           "health_url": "http://100.89.201.7:8000/"
         },
         {
-          "name": "Remote Ollama",
+          "name": "Remote Ollama Docker",
           "type": "ollama",
-          "health_url": "http://100.89.201.7:11434/api/tags"
+          "health_url": "http://100.89.201.7:11534/api/tags"
         }
       ]
     }

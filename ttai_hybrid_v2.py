@@ -57,8 +57,9 @@ PROVIDERS = [
     ProviderInfo(name="qwen3:4b", type="local_ollama", endpoint="http://localhost:11434", enabled=False, cost_per_token=0.0, avg_response_time=30.0),
     ProviderInfo(name="deepseek-r1:8b", type="local_ollama", endpoint="http://localhost:11434", enabled=False, cost_per_token=0.0, avg_response_time=35.0),
     
-    # Remote Ollama (vannt-work-op)
-    ProviderInfo(name="gemma3:4b-remote", type="remote_ollama", endpoint="http://100.89.201.7:11434", enabled=True, cost_per_token=0.0, avg_response_time=15.0),
+    # Remote Ollama (vannt-work-op) - Multi-port GPU
+    ProviderInfo(name="gemma3:4b-remote", type="remote_ollama", endpoint="http://100.89.201.7:11434", enabled=True, cost_per_token=0.0, avg_response_time=2.5),
+    ProviderInfo(name="deepseek-r1:8b-remote", type="remote_ollama", endpoint="http://100.89.201.7:11435", enabled=True, cost_per_token=0.0, avg_response_time=3.0),
     # Remote FastAPI (vannt-work-op)
     ProviderInfo(name="ttai-remote-fastapi", type="remote_fastapi", endpoint="http://100.89.201.7:8000", enabled=True, cost_per_token=0.0, avg_response_time=5.0),
     
@@ -139,9 +140,15 @@ def select_provider(message: str, requested_model: str = "") -> ProviderInfo:
             print(f"Code query -> DeepSeek: {deepseek_providers[0].name}")
             return deepseek_providers[0]
     
-    # STRATEGY 2: Complex reasoning -> Gemini Pro (most capable)
-    complex_keywords = ["phuc tap", "he thong", "kien truc", "phan tich", "so sanh", "danh gia", "giai thich", "machine learning", "ai"]
+    # STRATEGY 2: Complex reasoning -> DeepSeek Remote (GPU accelerated, better reasoning)
+    complex_keywords = ["phuc tap", "he thong", "kien truc", "phan tich", "so sanh", "danh gia", "giai thich", "machine learning", "ai", "reasoning", "logic", "analyze", "strategy"]
     if any(word in message_normalized for word in complex_keywords):
+        # Prefer deepseek-r1:8b-remote (GPU accelerated)
+        deepseek_remote = next((p for p in PROVIDERS if p.name == "deepseek-r1:8b-remote" and p.enabled), None)
+        if deepseek_remote:
+            print(f"Complex query -> DeepSeek Remote: {deepseek_remote.name}")
+            return deepseek_remote
+        # Fallback to Gemini Pro
         gemini_pro_providers = [p for p in PROVIDERS if "gemini-2.5-pro" in p.name and p.enabled]
         if gemini_pro_providers:
             print(f"Complex query -> Gemini Pro: {gemini_pro_providers[0].name}")
@@ -264,8 +271,15 @@ async def call_local_ollama(provider: ProviderInfo, message: str) -> str:
 async def call_remote_ollama(provider: ProviderInfo, message: str) -> str:
     """Call remote Ollama with timeout"""
     async with httpx.AsyncClient(timeout=15.0) as client:
+        # Extract model name from provider name
+        model_name = "gemma3:4b"  # default
+        if "deepseek" in provider.name:
+            model_name = "deepseek-r1:8b"
+        elif "gemma" in provider.name:
+            model_name = "gemma3:4b"
+        
         payload = {
-            "model": "gemma3:4b",
+            "model": model_name,
             "prompt": message,
             "stream": False
         }

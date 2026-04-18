@@ -24,7 +24,12 @@ from proxy_benchmark_store import (
     list_benchmark_runs,
 )
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+_FILE_PATH = Path(__file__).resolve()
+if len(_FILE_PATH.parents) >= 4:
+    WORKSPACE_ROOT = _FILE_PATH.parents[3]
+else:
+    # Docker/container fallback where the app is mounted directly at /app
+    WORKSPACE_ROOT = _FILE_PATH.parent
 BENCHMARK_DIR = WORKSPACE_ROOT / "benchmarks"
 BENCHMARK_LATEST_PATH = BENCHMARK_DIR / "proxy_benchmark_latest.json"
 

@@ -31,9 +31,15 @@ if (Test-Path $memoryDb) {
     $dbBackup = Join-Path $backupRoot "main-$timeStamp.sqlite"
     Copy-Item $memoryDb $dbBackup -Force
 
-    Get-ChildItem -Path $backupRoot -Filter 'main-*.sqlite' -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$sqliteRetentionDays) } |
-        Remove-Item -Force -ErrorAction SilentlyContinue
+    # Retention: keep max 5 most recent backups
+    $allBackups = Get-ChildItem -Path $backupRoot -Filter 'main-*.sqlite' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+    
+    if ($allBackups.Count -gt 5) {
+        $toDelete = $allBackups | Select-Object -Skip 5
+        $toDelete | Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "Retention: kept 5 backups, deleted $($toDelete.Count) old backups"
+    }
 }
 
 $mdBackupDir = Join-Path $backupRoot $dateStamp

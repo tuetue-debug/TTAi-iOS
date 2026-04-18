@@ -98,13 +98,21 @@ async function loadProxyState() {
         const data = await response.json();
         const summary = data.summary || {};
         const runtime = data.runtime || {};
+        
+        // Format success rate
+        const successRate = summary.success_rate ? (summary.success_rate * 100).toFixed(1) + '%' : '--';
+        const avgLatency = summary.avg_latency ? summary.avg_latency.toFixed(2) + 's' : '--';
+        
         proxyStatusCardEl.innerHTML = `
             <div class="summary-item"><span class="label">Status</span><span class="value">${formatProxyStatus(summary.service_status)}</span></div>
             <div class="summary-item"><span class="label">Mode</span><span class="value">${summary.mode || '--'}</span></div>
             <div class="summary-item"><span class="label">Preferred</span><span class="value">${summary.preferred_backend || '--'}</span></div>
             <div class="summary-item"><span class="label">Hedge</span><span class="value">${summary.hedge_enabled ? 'On' : 'Off'}</span></div>
             <div class="summary-item"><span class="label">Healthy Backends</span><span class="value">${summary.healthy_backend_count ?? '--'}/${summary.backend_count ?? '--'}</span></div>
-            <div class="summary-item"><span class="label">Source</span><span class="value">${runtime.source || '--'}</span></div>
+            <div class="summary-item"><span class="label">Requests</span><span class="value">${summary.requests_total ?? '--'}</span></div>
+            <div class="summary-item"><span class="label">Success Rate</span><span class="value">${successRate}</span></div>
+            <div class="summary-item"><span class="label">Avg Latency</span><span class="value">${avgLatency}</span></div>
+            <div class="summary-item"><span class="label">Uptime</span><span class="value">${summary.uptime_human || '--'}</span></div>
         `;
     } catch (error) {
         console.error('Error loading proxy state:', error);
@@ -151,6 +159,119 @@ async function loadProxyBenchmark() {
     } catch (error) {
         console.error('Error loading proxy benchmark:', error);
         proxyBenchmarkPanelEl.innerHTML = '<div class="summary-item"><span class="label">Benchmark</span><span class="value">Error</span></div>';
+    }
+}
+
+async function loadProxyMetrics() {
+    const proxyMetricsCardEl = document.getElementById('proxyMetricsCard');
+    if (!proxyMetricsCardEl) return;
+    
+    try {
+        // Try new endpoint first, fallback to proxy/state
+        let metrics = null;
+        try {
+            const response = await fetch(`${CONTROL_API_BASE}/proxy/metrics`, { headers: adminHeaders });
+            if (response.ok) {
+                metrics = await response.json();
+            }
+        } catch (e) {
+            console.log('Proxy metrics endpoint not available, falling back to proxy/state');
+        }
+        
+        // If no metrics from /proxy/metrics, try /proxy/state
+        if (!metrics) {
+            const stateResponse = await fetch(`${CONTROL_API_BASE}/proxy/state`, { headers: adminHeaders });
+            if (!stateResponse.ok) throw new Error('Failed to load proxy state');
+            const stateData = await stateResponse.json();
+            metrics = stateData.summary || {};
+        }
+        
+        // Format data
+        const requestsTotal = metrics.requests_total ?? '--';
+        const successRate = metrics.success_rate ? (metrics.success_rate * 100).toFixed(1) + '%' : '--';
+        const avgLatency = metrics.avg_latency ? metrics.avg_latency.toFixed(2) + 's' : '--';
+        const uptime = metrics.uptime_human || '--';
+        const errors = metrics.requests_error ?? '--';
+        
+        proxyMetricsCardEl.innerHTML = `
+            <div class="summary-item"><span class="label">Total Requests</span><span class="value">${requestsTotal}</span></div>
+            <div class="summary-item"><span class="label">Success Rate</span><span class="value">${successRate}</span></div>
+            <div class="summary-item"><span class="label">Avg Latency</span><span class="value">${avgLatency}</span></div>
+            <div class="summary-item"><span class="label">Errors</span><span class="value">${errors}</span></div>
+            <div class="summary-item"><span class="label">Uptime</span><span class="value">${uptime}</span></div>
+        `;
+        
+        // Also update the simple dashboard card if it exists
+        updateProxyDashboardSimple(metrics);
+        
+    } catch (error) {
+        console.error('Error loading proxy metrics:', error);
+        proxyMetricsCardEl.innerHTML = '<div class="summary-item"><span class="label">Proxy Metrics</span><span class="value">Error</span></div>';
+    }
+}
+
+function updateProxyDashboardSimple(metrics) {
+    const statusEl = document.getElementById('proxyDashStatus');
+    const requestsEl = document.getElementById('proxyDashRequests');
+    const latencyEl = document.getElementById('proxyDashLatency');
+    
+    if (statusEl) {
+        statusEl.textContent = '✅ Running';
+        statusEl.style.color = '#10b981';
+    }
+    if (requestsEl && metrics.requests_total !== undefined) {
+        requestsEl.textContent = metrics.requests_total;
+    }
+    if (latencyEl && metrics.avg_latency !== undefined) {
+        latencyEl.textContent = metrics.avg_latency.toFixed(2) + 's';
+    }
+}
+
+async function loadProxyDashboardStatus() {
+    const statusEl = document.getElementById('proxyDashStatus');
+    const requestsEl = document.getElementById('proxyDashRequests');
+    const latencyEl = document.getElementById('proxyDashLatency');
+    
+    if (!statusEl) return;
+    
+    try {
+        // Try to get proxy metrics
+        const response = await fetch(`${CONTROL_API_BASE}/proxy/metrics`, { headers: adminHeaders });
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (statusEl) {
+                statusEl.textContent = '✅ Running';
+                statusEl.style.color = '#10b981';
+            }
+            if (requestsEl && data.requests_total !== undefined) {
+                requestsEl.textContent = data.requests_total;
+            }
+            if (latencyEl && data.avg_latency !== undefined) {
+                latencyEl.textContent = data.avg_latency.toFixed(2) + 's';
+            }
+        } else {
+            // Fallback to proxy/state
+            const stateResponse = await fetch(`${CONTROL_API_BASE}/proxy/state`, { headers: adminHeaders });
+            if (stateResponse.ok) {
+                const stateData = await stateResponse.json();
+                if (statusEl) {
+                    statusEl.textContent = '✅ Running';
+                    statusEl.style.color = '#10b981';
+                }
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = '❌ Not Responding';
+                    statusEl.style.color = '#ef4444';
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading proxy dashboard status:', error);
+        if (statusEl) {
+            statusEl.textContent = '⚠️ Error';
+            statusEl.style.color = '#f59e0b';
+        }
     }
 }
 
@@ -394,7 +515,9 @@ async function refreshAll() {
             loadServiceHealth(),
             loadProxyState(),
             loadProxyBackends(),
-            loadProxyBenchmark()
+            loadProxyBenchmark(),
+            loadProxyMetrics(),
+            loadProxyDashboardStatus()
         ]);
     } catch (error) {
         console.error('Error refreshing data:', error);
@@ -411,6 +534,9 @@ async function initDashboard() {
     // Set up event listeners
     backupBtn.addEventListener('click', triggerBackup);
     refreshBtn.addEventListener('click', refreshAll);
+    
+    // Setup proxy dashboard button
+    setupProxyDashboardButton();
     
     // Auto-refresh every 30 seconds
     setInterval(refreshAll, 30000);

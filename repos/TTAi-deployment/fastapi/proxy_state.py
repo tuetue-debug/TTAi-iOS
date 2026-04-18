@@ -13,7 +13,12 @@ from proxy_control_state import load_proxy_control_state
 PROXY_PORT = 8015
 PROXY_ROOT_URL = f"http://127.0.0.1:{PROXY_PORT}"
 REQUEST_TIMEOUT = httpx.Timeout(5.0, connect=1.0)
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+_FILE_PATH = Path(__file__).resolve()
+if len(_FILE_PATH.parents) >= 4:
+    WORKSPACE_ROOT = _FILE_PATH.parents[3]
+else:
+    # Docker/container fallback where the app is mounted directly at /app
+    WORKSPACE_ROOT = _FILE_PATH.parent
 SIMPLE_PROXY_PATH = WORKSPACE_ROOT / "simple_proxy.py"
 
 DEFAULT_ROLE_MAP = {
@@ -41,12 +46,28 @@ async def probe_proxy_runtime() -> Dict[str, Any]:
     started = time.time()
     root = await _fetch_json(f"{PROXY_ROOT_URL}/")
     health = await _fetch_json(f"{PROXY_ROOT_URL}/health")
+    metrics = await _fetch_json(f"{PROXY_ROOT_URL}/proxy/metrics")
     latency_ms = round((time.time() - started) * 1000, 2)
 
     if root or health:
         backends = []
         if isinstance(root, dict):
             backends = root.get("backends") or []
+        
+        # Extract metrics if available
+        metrics_summary = {}
+        if isinstance(metrics, dict):
+            metrics_summary = {
+                "requests_total": metrics.get("requests_total", 0),
+                "requests_success": metrics.get("requests_success", 0),
+                "requests_error": metrics.get("requests_error", 0),
+                "success_rate": metrics.get("success_rate", 0),
+                "avg_latency": metrics.get("avg_latency", 0),
+                "uptime_seconds": metrics.get("uptime_seconds", 0),
+                "uptime_human": metrics.get("uptime_human", "0h 0m 0s"),
+                "backends_metrics": metrics.get("backends", {})
+            }
+        
         return {
             "live": True,
             "source": "live-probe",
@@ -63,6 +84,7 @@ async def probe_proxy_runtime() -> Dict[str, Any]:
             "backends": backends,
             "probe_latency_ms": latency_ms,
             "health": health or {},
+            "metrics": metrics_summary
         }
 
     return {
@@ -186,6 +208,10 @@ async def get_proxy_runtime_state() -> Dict[str, Any]:
     backends = await get_proxy_backends_state()
     control_state = backends.get("control_state", {})
     preferred = next((item["id"] for item in backends.get("items", []) if item.get("preferred")), runtime.get("preferred_backend"))
+    
+    # Extract metrics
+    metrics = runtime.get("metrics", {})
+    
     return {
         "summary": {
             "service_status": runtime.get("status", "unknown"),
@@ -199,6 +225,13 @@ async def get_proxy_runtime_state() -> Dict[str, Any]:
             "healthy_backend_count": backends.get("summary", {}).get("healthy", 0),
             "last_probe": int(time.time()),
             "probe_latency_ms": runtime.get("probe_latency_ms"),
+            # Metrics
+            "requests_total": metrics.get("requests_total", 0),
+            "requests_success": metrics.get("requests_success", 0),
+            "requests_error": metrics.get("requests_error", 0),
+            "success_rate": metrics.get("success_rate", 0),
+            "avg_latency": metrics.get("avg_latency", 0),
+            "uptime_human": metrics.get("uptime_human", "0h 0m 0s"),
         },
         "runtime": {
             "live": runtime.get("live", False),
@@ -207,5 +240,6 @@ async def get_proxy_runtime_state() -> Dict[str, Any]:
             "backends": runtime.get("backends") or [item["url"] for item in backends.get("items", [])],
             "health": runtime.get("health", {}),
             "control_state": control_state,
+            "metrics": metrics,
         },
     }

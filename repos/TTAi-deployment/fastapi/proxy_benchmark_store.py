@@ -13,7 +13,12 @@ from proxy_benchmark_models import (
     BenchmarkRunSummary,
 )
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+_FILE_PATH = Path(__file__).resolve()
+if len(_FILE_PATH.parents) >= 4:
+    WORKSPACE_ROOT = _FILE_PATH.parents[3]
+else:
+    # Docker/container fallback where the app is mounted directly at /app
+    WORKSPACE_ROOT = _FILE_PATH.parent
 DB_PATH = WORKSPACE_ROOT / "state" / "proxy_benchmark.db"
 
 

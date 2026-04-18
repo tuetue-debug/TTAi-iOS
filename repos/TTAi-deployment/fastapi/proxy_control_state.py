@@ -5,7 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
+_FILE_PATH = Path(__file__).resolve()
+if len(_FILE_PATH.parents) >= 4:
+    WORKSPACE_ROOT = _FILE_PATH.parents[3]
+else:
+    # Docker/container fallback where the app is mounted directly at /app
+    WORKSPACE_ROOT = _FILE_PATH.parent
 STATE_DIR = WORKSPACE_ROOT / "state"
 STATE_PATH = STATE_DIR / "proxy_control_state.json"
 

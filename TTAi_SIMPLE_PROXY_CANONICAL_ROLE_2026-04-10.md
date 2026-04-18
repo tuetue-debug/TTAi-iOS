@@ -26,7 +26,7 @@ Nghĩa là:
 
 ## 1. Nhận request từ public/customer-facing surfaces
 Ví dụ:
-- WordPress chat surface
+- WordPress chat surface (chat.tuetue.vn) ← **hiện đang dùng**
 - future chat surfaces
 - lightweight internal callers
 
@@ -77,6 +77,48 @@ Không hard-code mãi:
 
 ## 4. Không nên tự recovery mù
 Auto recovery chỉ nên xảy ra nếu được control plane bật rõ ràng.
+
+---
+
+# IV. Live State (2026-04-12)
+
+## Current Backend Pool
+- `http://localhost:8000` (canonical FastAPI) ✅ healthy
+
+## Current Consumers
+- WordPress plugin `ttai_chat` → `http://192.168.1.101:8015/api/chat`
+
+## Proxy Health
+- Status: healthy
+- Healthy count: 1
+- Total backends: 1
+- Latency to backend: ~0.27s
+
+## Dashboard Control Points Needed
+1. **Backend management**
+   - Add/remove backends
+   - Enable/disable backends
+   - Health check interval
+2. **Routing policy**
+   - Primary/fallback selection
+   - Hedge delay
+   - Safe mode toggle
+3. **Telemetry**
+   - Request count per backend
+   - Latency histogram
+   - Error rate
+4. **Token/key injection**
+   - API key validation layer
+   - Rate limiting per token
+   - Usage tracking
+
+## Future Token Gateway Role
+Proxy 8015 có thể trở thành **API gateway light** cho:
+- Cấp token cho khách
+- Cấp token cho chat.tuetue.vn
+- Unified auth layer
+- Single point of control
+- Observability across all consumers
 
 ## 5. Không nên là canonical metering anchor
 Vì nó không biết chắc provider/model/token truth cuối cùng.

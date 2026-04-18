@@ -132,7 +132,7 @@ class LoadBalancer:
                 ProviderConfig(
                     name="gemma4:e4b-remote",
                     provider_type=ProviderType.OLLAMA_REMOTE,
-                    endpoint="http://100.89.201.7:11434/api/generate",
+                    endpoint="http://100.89.201.7:11534/api/generate",
                     model="gemma4:e4b",
                     weight=0.40,
                     timeout=45,
@@ -141,7 +141,7 @@ class LoadBalancer:
                 ProviderConfig(
                     name="gemma3:4b-remote",
                     provider_type=ProviderType.OLLAMA_REMOTE,
-                    endpoint="http://100.89.201.7:11434/api/generate",
+                    endpoint="http://100.89.201.7:11534/api/generate",
                     model="gemma3:4b",
                     weight=0.05,
                     timeout=30,
@@ -150,7 +150,7 @@ class LoadBalancer:
                 ProviderConfig(
                     name="deepseek-r1:8b-remote",
                     provider_type=ProviderType.OLLAMA_REMOTE,
-                    endpoint="http://100.89.201.7:11435/api/generate",
+                    endpoint="http://100.89.201.7:11534/api/generate",
                     model="deepseek-r1:8b",
                     weight=0.20,
                     timeout=120,
@@ -204,8 +204,8 @@ class LoadBalancer:
         defaults = {
             "host": "vannt-work-op",
             "slots": [
-                {"port": 11434, "model": "gemma4:e4b", "enabled": True},
-                {"port": 11435, "model": "deepseek-r1:8b", "enabled": True},
+                {"slot": 11434, "port": 11534, "model": "gemma4:e4b", "enabled": True},
+                {"slot": 11435, "port": 11534, "model": "deepseek-r1:8b", "enabled": True},
             ]
         }
         try:
@@ -213,16 +213,18 @@ class LoadBalancer:
                 data = json.loads(REMOTE_OLLAMA_STATE_PATH.read_text(encoding="utf-8"))
                 slots = data.get("slots", [])
                 if isinstance(slots, list) and len(slots) == 2:
+                    normalized = []
+                    slot_ids = [11434, 11435]
+                    for index, slot in enumerate(slots[:2]):
+                        normalized.append({
+                            "slot": int(slot.get("slot") or slot_ids[index]),
+                            "port": 11534,
+                            "model": slot.get("model"),
+                            "enabled": bool(slot.get("enabled", True)),
+                        })
                     return {
                         "host": data.get("host", defaults["host"]),
-                        "slots": [
-                            {
-                                "port": int(slot.get("port", defaults["slots"][index]["port"])),
-                                "model": slot.get("model"),
-                                "enabled": bool(slot.get("enabled", True)),
-                            }
-                            for index, slot in enumerate(slots)
-                        ]
+                        "slots": normalized,
                     }
         except Exception as e:
             logger.warning(f"Failed to load remote ollama state: {e}")
@@ -236,19 +238,14 @@ class LoadBalancer:
         )
 
     def _apply_remote_ollama_state(self):
-        remote_slots = {slot["port"]: slot for slot in self.remote_ollama_state.get("slots", [])}
+        remote_slots = list(self.remote_ollama_state.get("slots", []))
         for provider in self.providers.get(ProviderType.OLLAMA_REMOTE, []):
-            matched_slot = None
-            for slot in remote_slots.values():
-                endpoint_port = 11434 if ":11434/" in provider.endpoint else (11435 if ":11435/" in provider.endpoint else None)
-                if endpoint_port == slot.get("port"):
-                    matched_slot = slot
-                    break
+            matched_slot = next((slot for slot in remote_slots if slot.get("model") == provider.model), None)
             if not matched_slot:
+                provider.enabled = False
                 continue
-            slot_model = matched_slot.get("model")
             slot_enabled = matched_slot.get("enabled", False)
-            provider.enabled = bool(slot_enabled and slot_model == provider.model)
+            provider.enabled = bool(slot_enabled)
 
         self._apply_group_weights()
 
@@ -258,21 +255,18 @@ class LoadBalancer:
         remote_models = [p for p in self.providers.get(ProviderType.OLLAMA_REMOTE, [])]
         for slot in self.remote_ollama_state.get("slots", []):
             port = slot.get("port")
+            slot_id = slot.get("slot", port)
             slot_model = slot.get("model")
-            matched_provider = None
-            for provider in remote_models:
-                endpoint_port = 11434 if ":11434/" in provider.endpoint else (11435 if ":11435/" in provider.endpoint else None)
-                if endpoint_port == port and provider.model == slot_model:
-                    matched_provider = provider
-                    break
+            matched_provider = next((provider for provider in remote_models if provider.model == slot_model), None)
             slots.append({
+                "slot": slot_id,
                 "port": port,
                 "model": slot_model,
                 "enabled": bool(slot.get("enabled", False)),
                 "healthy": bool(matched_provider and health.get(matched_provider.name)),
                 "warm": bool(matched_provider and health.get(matched_provider.name)),
                 "provider_name": matched_provider.name if matched_provider else None,
-                "available_models": [p.model for p in remote_models if ((11434 if ':11434/' in p.endpoint else 11435 if ':11435/' in p.endpoint else None) == port)],
+                "available_models": [p.model for p in remote_models],
             })
         return {
             "host": self.remote_ollama_state.get("host", "vannt-work-op"),
@@ -280,15 +274,18 @@ class LoadBalancer:
         }
 
     def update_remote_ollama_slot(self, port: int, model: Optional[str], enabled: bool = True) -> Dict:
+        requested_port = int(port)
+
         updated = False
         for slot in self.remote_ollama_state.get("slots", []):
-            if int(slot.get("port")) == int(port):
+            slot_identity = int(slot.get("slot") or slot.get("port"))
+            if slot_identity == requested_port:
                 slot["model"] = None if model in (None, "", "off") else model
                 slot["enabled"] = bool(enabled and slot["model"] is not None)
                 updated = True
                 break
         if not updated:
-            raise ValueError(f"Remote Ollama slot {port} not found")
+            raise ValueError(f"Remote Ollama slot {requested_port} not found")
         self._save_remote_ollama_state()
         self._apply_remote_ollama_state()
         return self.get_remote_ollama_state()
@@ -377,7 +374,7 @@ class LoadBalancer:
         """
         
         if classification.complexity == QueryComplexity.SIMPLE:
-            # Simple queries: prefer remote Gemma 4 first, then any remote, then local fallback
+            # Simple queries: lock to Gemma lane first; do not drift into DeepSeek unless no Gemma lane exists.
             candidates = [
                 p for p in self.providers[ProviderType.OLLAMA_REMOTE]
                 if p.model == "gemma4:e4b" and p.enabled
@@ -388,9 +385,19 @@ class LoadBalancer:
                     if p.model == "gemma3:4b" and p.enabled
                 ]
             if not candidates:
-                candidates = [p for p in self.providers[ProviderType.OLLAMA_REMOTE] if p.enabled]
+                candidates = [
+                    p for p in self.providers[ProviderType.OLLAMA_LOCAL]
+                    if p.model in ("gemma4:e4b", "gemma3:4b", "qwen3:4b") and p.enabled
+                ]
+            if not candidates:
+                candidates = [
+                    p for p in self.providers[ProviderType.OLLAMA_REMOTE]
+                    if p.enabled and "deepseek" not in p.model
+                ]
             if not candidates:
                 candidates = [p for p in self.providers[ProviderType.OLLAMA_LOCAL] if p.enabled]
+            if not candidates:
+                candidates = [p for p in self.providers[ProviderType.OLLAMA_REMOTE] if p.enabled]
 
             weights = [p.weight for p in candidates]
             selected = random.choices(candidates, weights=weights, k=1)[0]

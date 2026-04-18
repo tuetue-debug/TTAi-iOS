@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class OllamaService:
     """Service for handling Ollama API calls with async support"""
     
-    def __init__(self, base_url: str = "http://localhost:11434", max_workers: int = 2, timeout_seconds: int = 30):
+    def __init__(self, base_url: str = "http://100.89.201.7:11534", max_workers: int = 2, timeout_seconds: int = 30):
         self.base_url = base_url.rstrip("/")
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.request_timeout = timeout_seconds
@@ -214,7 +214,7 @@ class OllamaService:
         self.executor.shutdown(wait=False)
 
 # Global Ollama service instance configured from environment
-DEFAULT_OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+DEFAULT_OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://100.89.201.7:11534")
 DEFAULT_OLLAMA_MAX_WORKERS = int(os.getenv("OLLAMA_MAX_WORKERS", os.getenv("MAX_WORKERS", "2")))
 DEFAULT_OLLAMA_TIMEOUT = int(
     os.getenv(

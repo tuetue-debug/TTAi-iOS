@@ -1081,8 +1081,13 @@ function renderModels() {
     const providers = data.providers || [];
     const ollamaModels = data.ollama?.models || [];
     const remoteOllama = data.remote_ollama || { host: 'vannt-work-op', slots: [] };
-    const remoteSlot11434 = remoteOllama.slots.find(slot => Number(slot.port) === 11434) || { model: 'gemma4:e4b', enabled: true, healthy: false, warm: false, available_models: ['gemma4:e4b', 'deepseek-r1:8b', 'qwen3-vl:8b', 'gemma3:12b'] };
-    const remoteSlot11435 = remoteOllama.slots.find(slot => Number(slot.port) === 11435) || { model: null, enabled: false, healthy: false, warm: false, available_models: ['off', 'gemma4:e4b', 'qwen3-vl:8b'] };
+    const remoteSlot11434 = remoteOllama.slots.find(slot => Number(slot.port) === 11434) || { model: 'gemma4:e4b', enabled: true, healthy: false, warm: false, available_models: ['gemma4:e4b', 'deepseek-r1:8b', 'qwen3-vl:8b', 'gemma3:12b'], backing_port: 11534 };
+    const remoteSlot11435 = remoteOllama.slots.find(slot => Number(slot.port) === 11435) || { model: null, enabled: false, healthy: false, warm: false, available_models: ['off'], backing_port: 11534 };
+    const remotePrimaryLabel = remoteSlot11434.backing_port ? `Cổng ${remoteSlot11434.backing_port}` : 'Cổng 11534';
+    const uniqueModels = (models = []) => [...new Set((Array.isArray(models) ? models : []).filter(Boolean))].filter(model => model !== 'off');
+    const remoteSlot11434Options = uniqueModels(remoteSlot11434.available_models);
+    const remoteSlot11435Options = uniqueModels(remoteSlot11435.available_models);
+    const showSecondaryRemoteSlot = remoteSlot11435.enabled || (!!remoteSlot11435.model && remoteSlot11435.model !== 'off') || remoteSlot11435Options.length > 0;
     const healthStatus = data.load_balancer_metrics?.health_status || {};
     const recentUsage = Array.isArray(data.recent_usage?.recent_events) ? data.recent_usage.recent_events : (Array.isArray(data.recent_usage?.events) ? data.recent_usage.events : []);
     const proxyRuntime = data.proxy_runtime || {};
@@ -1287,10 +1292,10 @@ function renderModels() {
                                                 </div>
                                                 <div style="display:flex; flex-direction:column; gap:7px;">
                                                     <div style="display:flex; flex-direction:column; gap:5px;">
-                                                        <div style="font-size:10px; color:#94a3b8;">Cổng 11434</div>
+                                                        <div style="font-size:10px; color:#94a3b8;">${remotePrimaryLabel}</div>
                                                         <select id="remote-ollama-slot-11434" style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
                                                             <option value="off" ${!remoteSlot11434.enabled || !remoteSlot11434.model ? 'selected' : ''}>off</option>
-                                                            ${remoteSlot11434.available_models.map(model => `<option value="${model}" ${remoteSlot11434.model === model && remoteSlot11434.enabled ? 'selected' : ''}>${model}</option>`).join('')}
+                                                            ${remoteSlot11434Options.map(model => `<option value="${model}" ${remoteSlot11434.model === model && remoteSlot11434.enabled ? 'selected' : ''}>${model}</option>`).join('')}
                                                         </select>
                                                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                                                             <button class="btn-mini" data-action="remote-ollama-save" data-port="11434">Apply</button>
@@ -1300,11 +1305,12 @@ function renderModels() {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    ${showSecondaryRemoteSlot ? `
                                                     <div style="display:flex; flex-direction:column; gap:5px;">
                                                         <div style="font-size:10px; color:#94a3b8;">Cổng 11435</div>
                                                         <select id="remote-ollama-slot-11435" style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
                                                             <option value="off" ${!remoteSlot11435.enabled || !remoteSlot11435.model ? 'selected' : ''}>off</option>
-                                                            ${remoteSlot11435.available_models.map(model => `<option value="${model}" ${remoteSlot11435.model === model && remoteSlot11435.enabled ? 'selected' : ''}>${model}</option>`).join('')}
+                                                            ${remoteSlot11435Options.map(model => `<option value="${model}" ${remoteSlot11435.model === model && remoteSlot11435.enabled ? 'selected' : ''}>${model}</option>`).join('')}
                                                         </select>
                                                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                                                             <button class="btn-mini" data-action="remote-ollama-save" data-port="11435">Apply</button>
@@ -1314,6 +1320,7 @@ function renderModels() {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    ` : ''}
                                                 </div>
                                             </div>
                                         </div>
@@ -2110,9 +2117,10 @@ function renderProxy(proxyMetrics, usageDataPayload) {
 
     const totalRequests = proxyMetrics?.requests_total ?? proxySummary.requests_total ?? 0;
     const successRate = proxyMetrics?.success_rate != null ? `${(proxyMetrics.success_rate * 100).toFixed(1)}%` : '--';
-    const avgLatency = proxyMetrics?.avg_latency != null ? `${Number(proxyMetrics.avg_latency).toFixed(2)} s` : '--';
+    const avgLatency = proxyMetrics?.avg_latency != null ? `${Number(proxyMetrics.avg_latency).toFixed(2)} ms` : '--';
     const uptime = proxyMetrics?.uptime_human || proxySummary.uptime_human || '--';
-    const serviceStatus = proxySummary.status || proxyRuntime.status || 'unknown';
+    const liveHealthy = proxyMetrics?.backends && Object.values(proxyMetrics.backends).some(item => item && item.healthy);
+    const serviceStatus = proxySummary.service_status || proxySummary.status || (liveHealthy ? 'healthy' : null) || proxyRuntime.service_status || proxyRuntime.status || 'unknown';
     const serviceTone = serviceStatus === 'healthy' ? 'good' : (serviceStatus === 'degraded' ? 'warning' : 'danger');
     const mode = proxyRuntime.mode || proxySummary.mode || '--';
     const hedgeEnabled = proxyRuntime.hedge?.enabled ?? proxySummary.hedge_enabled;
