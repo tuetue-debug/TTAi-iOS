@@ -7,9 +7,14 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 from pathlib import Path
+
+# Gemma4 has 262k vocab — Unsloth fused CE fails; disable it
+os.environ["UNSLOTH_DISABLE_FUSED_CE"] = "1"
+os.environ["UNSLOTH_FUSED_CROSS_ENTROPY"] = "0"
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser()
