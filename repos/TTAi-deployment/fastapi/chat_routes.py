@@ -419,7 +419,7 @@ async def _ai_search_decision(
     content: str,
     base_url: str,
     model: str,
-    timeout: float = 6.0,
+    timeout: float = 10.0,
 ) -> dict | None:
     """
     Gọi LLM nhanh (non-streaming) để quyết định có cần search không và query nào.
