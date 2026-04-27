@@ -29,17 +29,17 @@ args = parser.parse_args()
 from unsloth import FastLanguageModel
 import torch
 
-MAX_SEQ_LEN = 512    # reduced to 512 for Gemma4 multimodal on 16GB VRAM
+MAX_SEQ_LEN = 2048   # gemma-3-4b-it text-only, fits 16GB fine
 DTYPE = None         # auto-detect (bfloat16 on Ampere+)
 LOAD_IN_4BIT = True  # QLoRA — fits 16GB easily
 
 print("Loading base model...")
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="unsloth/gemma-4-E4B-it",
+    model_name="unsloth/gemma-3-4b-it",
     max_seq_length=MAX_SEQ_LEN,
     dtype=DTYPE,
     load_in_4bit=LOAD_IN_4BIT,
-    device_map="cuda",  # load trực tiếp lên GPU, tránh lỗi Windows page file
+    device_map="cuda",
 )
 
 # ── LoRA adapters ─────────────────────────────────────────────────────────────
@@ -94,8 +94,8 @@ trainer = SFTTrainer(
     max_seq_length=MAX_SEQ_LEN,
     dataset_num_proc=2,
     args=TrainingArguments(
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=16,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=4,
         warmup_steps=10,
         num_train_epochs=args.epochs,
         learning_rate=args.lr,
