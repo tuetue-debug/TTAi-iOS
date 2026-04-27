@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TTAi Chat Interface
  * Description: AI Chat Interface for TTAi Super Model Hybrid
- * Version: 1.2.3
+ * Version: 1.2.2
  * Author: Tuệ Tuệ
  */
 
@@ -47,14 +47,14 @@ class TTAi_Chat_Plugin {
             'ttai-chat-style',
             plugin_dir_url(__FILE__) . 'css/chat-style.css',
             array(),
-            '1.2.3'
+            '1.2.2'
         );
         
         wp_enqueue_script(
             'ttai-chat-script',
             plugin_dir_url(__FILE__) . 'js/chat-script.js',
             array('jquery'),
-            '1.2.3',
+            '1.2.2',
             true
         );
         

@@ -35,12 +35,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
         await fetchAPI('/control-auth/session');
+        updateSidebarStatus(true);
     } catch (error) {
+        updateSidebarStatus(false);
         return;
     }
 
     const initialHashPage = (window.location.hash || '#overview').replace('#', '');
-    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'proxy', 'about'];
+    const allowedPages = ['overview', 'quota', 'billing', 'errors', 'models', 'system', 'usage', 'users', 'proxy', 'providers', 'about'];
     if (allowedPages.includes(initialHashPage)) {
         switchPage(initialHashPage, false);
     } else {
@@ -72,7 +74,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         sidebar?.classList.toggle('collapsed');
         document.body.classList.toggle('sidebar-collapsed');
     });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R') {
+            const tag = document.activeElement?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            refreshCurrentPage();
+        }
+    });
+
+    initAutoRefresh();
 });
+
+// Sidebar connection status
+function updateSidebarStatus(connected) {
+    const dot = document.getElementById('sidebar-status-dot');
+    const text = document.getElementById('sidebar-status-text');
+    if (!dot || !text) return;
+    if (connected) {
+        dot.className = 'status-dot online';
+        text.textContent = 'API Connected';
+    } else {
+        dot.className = 'status-dot offline';
+        text.textContent = 'Disconnected';
+    }
+}
+
+// Auto-refresh
+let _autoRefreshInterval = 0;
+let _autoRefreshRemaining = 0;
+
+function initAutoRefresh() {
+    const select = document.getElementById('auto-refresh-select');
+    const countdownEl = document.getElementById('auto-refresh-countdown');
+    if (!select) return;
+
+    select.addEventListener('change', () => {
+        _autoRefreshInterval = parseInt(select.value, 10);
+        _autoRefreshRemaining = _autoRefreshInterval;
+        if (countdownEl) countdownEl.textContent = _autoRefreshInterval > 0 ? `${_autoRefreshInterval}s` : '';
+    });
+
+    setInterval(() => {
+        if (_autoRefreshInterval <= 0) return;
+        _autoRefreshRemaining--;
+        if (countdownEl) countdownEl.textContent = `${_autoRefreshRemaining}s`;
+        if (_autoRefreshRemaining <= 0) {
+            _autoRefreshRemaining = _autoRefreshInterval;
+            refreshCurrentPage();
+        }
+    }, 1000);
+}
+
+function _resetAutoRefreshCountdown() {
+    _autoRefreshRemaining = _autoRefreshInterval;
+}
 
 // Navigation
 function initNavigation() {
@@ -107,9 +163,13 @@ function setActivePage(page) {
         models: 'Models',
         system: 'System',
         usage: 'Usage',
+        users: 'Users',
+        proxy: 'Proxy',
+        providers: 'Providers',
         about: 'About'
     };
     pageTitle.textContent = pageTitles[page] || 'Dashboard';
+    document.title = `${pageTitles[page] || 'Dashboard'} — TTAi Control`;
 
     // Show/hide pages
     pages.forEach(p => {
@@ -160,8 +220,9 @@ async function fetchAPI(endpoint, options = {}) {
             ...options,
             headers
         });
-        
+
         if (response.status === 401 || response.status === 403) {
+            updateSidebarStatus(false);
             window.location.href = '/control-login';
             throw new Error('Control authentication required');
         }
@@ -169,26 +230,63 @@ async function fetchAPI(endpoint, options = {}) {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
+
         return await response.json();
     } catch (error) {
+        if (error instanceof TypeError) {
+            updateSidebarStatus(false);
+        }
         console.error(`API fetch failed: ${endpoint}`, error);
         throw error;
     }
 }
 
-// Page loading
+// Page loading — stale-while-revalidate caching
+function _hasCachedData(page) {
+    const cache = {
+        overview: overviewData, quota: quotaData, billing: billingData,
+        errors: errorsData, models: modelsData, system: systemData,
+        usage: usageData, users: usersData, proxy: proxyStateData,
+        providers: providersData, about: true
+    };
+    return !!cache[page];
+}
+
+function _renderCached(page) {
+    switch (page) {
+        case 'overview': renderOverview(); break;
+        case 'quota': renderQuota(); break;
+        case 'billing': renderBilling(); break;
+        case 'errors': renderErrors(); break;
+        case 'models': renderModels(); break;
+        case 'system': renderSystem(); break;
+        case 'usage': renderUsage(); break;
+        case 'users': renderUsers(); break;
+        case 'providers': renderProviders(); break;
+        case 'about': renderAbout(); break;
+        // proxy skipped — complex multi-source state
+    }
+}
+
 async function loadPage(page) {
     const pageEl = document.getElementById(`page-${page}`);
-    
-    // Show loading state
-    pageEl.innerHTML = `
-        <div class="loading-state">
-            <i class="fas fa-spinner fa-spin"></i>
-            <p>Loading ${page} data...</p>
-        </div>
-    `;
-    
+    const lastUpdatedEl = document.getElementById('page-last-updated');
+    const hasCached = _hasCachedData(page);
+
+    if (hasCached) {
+        // Render stale data immediately, then refresh silently
+        _renderCached(page);
+        if (lastUpdatedEl) lastUpdatedEl.textContent = 'Refreshing...';
+    } else {
+        if (lastUpdatedEl) lastUpdatedEl.textContent = '';
+        pageEl.innerHTML = `
+            <div class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading ${page} data...</p>
+            </div>
+        `;
+    }
+
     try {
         switch (page) {
             case 'overview':
@@ -212,6 +310,12 @@ async function loadPage(page) {
             case 'usage':
                 await loadUsage();
                 break;
+            case 'users':
+                await loadUsers();
+                break;
+            case 'providers':
+                await loadProviders();
+                break;
             case 'about':
                 renderAbout();
                 break;
@@ -227,18 +331,28 @@ async function loadPage(page) {
                     </div>
                 `;
         }
+        if (lastUpdatedEl) {
+            lastUpdatedEl.textContent = `Updated ${new Date().toLocaleTimeString('vi-VN')}`;
+        }
+        _resetAutoRefreshCountdown();
     } catch (error) {
-        pageEl.innerHTML = `
-            <div class="error-state">
-                <i class="fas fa-exclamation-circle"></i>
-                <h3>Failed to load data</h3>
-                <p>${error.message}</p>
-                <button class="btn-refresh" onclick="refreshCurrentPage()">
-                    <i class="fas fa-sync-alt"></i>
-                    Retry
-                </button>
-            </div>
-        `;
+        if (hasCached) {
+            // Keep stale render, just show toast
+            if (lastUpdatedEl) lastUpdatedEl.textContent = 'Refresh failed';
+            showToast(`Refresh failed: ${error.message}`, 'error');
+        } else {
+            pageEl.innerHTML = `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <h3>Failed to load data</h3>
+                    <p>${error.message}</p>
+                    <button class="btn-refresh" onclick="refreshCurrentPage()">
+                        <i class="fas fa-sync-alt"></i>
+                        Retry
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
@@ -380,15 +494,6 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 async function runControlAction(action, target = null, timeout = 30) {
     return fetchAPI('/control-api/actions/run', {
         method: 'POST',
@@ -410,6 +515,7 @@ async function loadControlActionHistory(containerId = 'models-actions-history') 
         }
 
         container.innerHTML = `
+            <div style="max-height:240px;overflow-y:auto;">
             <table class="table">
                 <thead>
                     <tr>
@@ -417,7 +523,6 @@ async function loadControlActionHistory(containerId = 'models-actions-history') 
                         <th>Action</th>
                         <th>Target</th>
                         <th>Status</th>
-                        <th>Result</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -425,13 +530,13 @@ async function loadControlActionHistory(containerId = 'models-actions-history') 
                         <tr>
                             <td>${formatTimestamp(item.timestamp)}</td>
                             <td>${item.action || '--'}</td>
-                            <td>${formatShortLabel(item.target || '--', 24)}</td>
+                            <td>${formatShortLabel(item.target || '--', 28)}</td>
                             <td><span class="badge ${getStatusTone(item.status)}">${item.status || '--'}</span></td>
-                            <td>${formatShortLabel(item.result || '--', 64)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
+            </div>
         `;
     } catch (error) {
         container.innerHTML = `<div class="error-state compact-empty">Failed to load control action history: ${error.message}</div>`;
@@ -571,12 +676,16 @@ async function loadOverview() {
 function renderOverview() {
     const pageEl = document.getElementById('page-overview');
     const data = overviewData;
-    
+
     if (!data) return;
-    
+
     const healthStatus = data.health?.summary?.status || 'unknown';
-    const healthClass = healthStatus === 'healthy' ? 'good' : 
+    const healthClass = healthStatus === 'healthy' ? 'good' :
                        healthStatus === 'degraded' ? 'warning' : 'danger';
+    const healthCheckedAt = data.health?.summary?.last_checked || data.health?.summary?.checked_at || null;
+    const lastCheckLabel = healthCheckedAt
+        ? `Checked ${formatTimestamp(healthCheckedAt)}`
+        : `Checked ${new Date().toLocaleTimeString('vi-VN')}`;
     
     const windowEvents = data.usage?.window_event_count || 0;
     const billableCost = data.billing?.summary?.billable_estimated_cost || '--';
@@ -589,7 +698,18 @@ function renderOverview() {
         Object.keys(data.quota.reason_breakdown)[0] || 'N/A' : 'N/A';
     
     const recentErrors = data.alerts?.recent_errors || [];
-    
+    const recentEvents = data.usage?.recent_events || [];
+    const usageSummary = data.usage?.summary || {};
+    const totalEvents = usageSummary.total_events || 0;
+    const successEvents = usageSummary.success_events || 0;
+    const successRate = totalEvents > 0 ? ((successEvents / totalEvents) * 100).toFixed(1) : null;
+    const successRateClass = successRate !== null ? (parseFloat(successRate) >= 95 ? 'good' : parseFloat(successRate) >= 80 ? 'warning' : 'danger') : 'neutral';
+    const avgLatency = usageSummary.avg_processing_time != null ? Number(usageSummary.avg_processing_time).toFixed(2) : null;
+    const totalTokens = usageSummary.total_tokens_est || 0;
+    const fallbackEvents = usageSummary.fallback_events || 0;
+    const modelBreakdown = data.billing?.summary?.model_breakdown || {};
+    const topModels = Object.entries(modelBreakdown).slice(0, 4);
+
     pageEl.innerHTML = `
         <div class="action-bar">
             <button class="btn-refresh" id="overview-health-refresh-btn">
@@ -609,7 +729,7 @@ function renderOverview() {
                 <div class="kpi-value ${healthClass}">${healthStatus.toUpperCase()}</div>
                 <div class="kpi-trend">
                     <i class="fas fa-heartbeat"></i>
-                    <span>Last check: Just now</span>
+                    <span>${lastCheckLabel}</span>
                 </div>
             </div>
             
@@ -626,7 +746,7 @@ function renderOverview() {
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Billing</div>
                 <div class="kpi-title">Billable Cost</div>
-                <div class="kpi-value neutral">$${billableCost}</div>
+                <div class="kpi-value neutral">${formatCost(data.billing?.summary?.billable_estimated_cost)}</div>
                 <div class="kpi-trend">
                     <i class="fas fa-dollar-sign"></i>
                     <span>Estimated</span>
@@ -645,7 +765,7 @@ function renderOverview() {
         </div>
         
         <div class="panel-grid">
-            <div class="panel">
+            <div class="panel panel-compact">
                 <div class="panel-header">
                     <div class="panel-title">Billing Summary</div>
                     <div class="panel-subtitle">Estimated costs</div>
@@ -653,7 +773,7 @@ function renderOverview() {
                 <div class="panel-content">
                     <div class="panel-row">
                         <span class="panel-label">Total Estimated Cost</span>
-                        <span class="panel-value">$${data.billing?.summary?.total_estimated_cost || '--'}</span>
+                        <span class="panel-value">${formatCost(data.billing?.summary?.total_estimated_cost)}</span>
                     </div>
                     <div class="panel-row">
                         <span class="panel-label">Billable Events</span>
@@ -665,8 +785,8 @@ function renderOverview() {
                     </div>
                 </div>
             </div>
-            
-            <div class="panel">
+
+            <div class="panel panel-compact">
                 <div class="panel-header">
                     <div class="panel-title">Quota Watch</div>
                     <div class="panel-subtitle">Blocked activity</div>
@@ -686,14 +806,14 @@ function renderOverview() {
                     </div>
                 </div>
             </div>
-            
-            <div class="panel panel-fixed-errors">
+
+            <div class="panel panel-compact panel-fixed-errors">
                 <div class="panel-header">
                     <div class="panel-title">Recent Errors</div>
                     <div class="panel-subtitle">Last 5 errors</div>
                 </div>
                 <div class="panel-content panel-scroll-y">
-                    ${recentErrors.length > 0 ? 
+                    ${recentErrors.length > 0 ?
                         recentErrors.slice(0, 5).map(error => {
                             const ts = error.timestamp ? new Date(error.timestamp) : null;
                             const timePart = ts && !Number.isNaN(ts.getTime()) ? ts.toLocaleTimeString('vi-VN') : '--';
@@ -703,12 +823,79 @@ function renderOverview() {
                                 <span class="panel-label recent-error-time"><span>${timePart}</span><span>${datePart}</span></span>
                                 <span class="panel-value">${error.error || error.message || error.status || 'Unknown error'}</span>
                             </div>
-                        `}).join('') : 
+                        `}).join('') :
                         `<div class="panel-row">
                             <span class="panel-label">Status</span>
                             <span class="panel-value">No recent errors</span>
                         </div>`
                     }
+                </div>
+            </div>
+
+            <div class="panel panel-compact">
+                <div class="panel-header">
+                    <div class="panel-title">Recent Activity</div>
+                    <div class="panel-subtitle">Last requests</div>
+                </div>
+                <div class="panel-content">
+                    ${recentEvents.length > 0 ?
+                        recentEvents.slice(0, 5).map(ev => {
+                            const ts = ev.timestamp ? new Date(ev.timestamp) : null;
+                            const timeStr = ts && !Number.isNaN(ts.getTime()) ? ts.toLocaleTimeString('vi-VN') : '--';
+                            const model = ev.model ? ev.model.split('/').pop().substring(0, 22) : 'N/A';
+                            const isOk = ev.status === 'success';
+                            const dot = isOk
+                                ? `<span style="color:var(--accent-green)">●</span>`
+                                : `<span style="color:var(--accent-red)">●</span>`;
+                            return `<div class="panel-row">
+                                <span class="panel-label" style="font-size:11px;color:var(--text-muted)">${timeStr}</span>
+                                <span class="panel-value" style="font-size:12px;gap:6px;display:flex;align-items:center">${dot} ${escapeHtml(model)}</span>
+                            </div>`;
+                        }).join('') :
+                        `<div class="panel-row"><span class="panel-label">Status</span><span class="panel-value">No recent events</span></div>`
+                    }
+                </div>
+            </div>
+
+            <div class="panel panel-compact">
+                <div class="panel-header">
+                    <div class="panel-title">Top Models</div>
+                    <div class="panel-subtitle">By estimated cost</div>
+                </div>
+                <div class="panel-content">
+                    ${topModels.length > 0 ?
+                        topModels.map(([model, cost]) => `
+                        <div class="panel-row">
+                            <span class="panel-label">${escapeHtml(model.split('/').pop().substring(0, 20))}</span>
+                            <span class="panel-value">${formatCost(cost)}</span>
+                        </div>`).join('') :
+                        `<div class="panel-row"><span class="panel-label">Status</span><span class="panel-value">No data</span></div>`
+                    }
+                </div>
+            </div>
+
+            <div class="panel panel-compact">
+                <div class="panel-header">
+                    <div class="panel-title">Performance</div>
+                    <div class="panel-subtitle">Request metrics</div>
+                </div>
+                <div class="panel-content">
+                    <div class="panel-row">
+                        <span class="panel-label">Success Rate</span>
+                        <span class="panel-value ${successRateClass}">${successRate !== null ? successRate + '%' : '--'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Avg Latency</span>
+                        <span class="panel-value">${avgLatency !== null ? avgLatency + 's' : '--'}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Total Tokens Est.</span>
+                        <span class="panel-value">${totalTokens.toLocaleString()}</span>
+                    </div>
+                    <div class="panel-row">
+                        <span class="panel-label">Fallback Events</span>
+                        <span class="panel-value ${fallbackEvents > 0 ? 'warning' : 'neutral'}">${fallbackEvents}</span>
+                    </div>
                 </div>
             </div>
 
@@ -720,9 +907,10 @@ function renderOverview() {
         btn.disabled = true;
         try {
             await runControlAction('health_refresh');
+            showToast('Health snapshot refreshed', 'success');
             await loadOverview();
         } catch (error) {
-            alert(`Health refresh failed: ${error.message}`);
+            showToast(`Health refresh failed: ${error.message}`, 'error');
         } finally {
             btn.disabled = false;
         }
@@ -733,10 +921,10 @@ function renderOverview() {
         btn.disabled = true;
         try {
             const result = await runControlAction('model_warmup_all', null, 20);
-            alert(result.message || 'Warm-up completed');
+            showToast(result.message || 'Warm-up completed', 'success');
             await loadOverview();
         } catch (error) {
-            alert(`Warm-up failed: ${error.message}`);
+            showToast(`Warm-up failed: ${error.message}`, 'error');
         } finally {
             btn.disabled = false;
         }
@@ -923,6 +1111,7 @@ function renderBilling() {
     const tenantBreakdown = data.tenant_breakdown || {};
     const apiKeyBreakdown = data.api_key_breakdown || {};
     const providerBreakdown = data.provider_breakdown || {};
+    const modelBreakdown = data.model_breakdown || {};
     const billableModeBreakdown = data.billable_mode_breakdown || {};
     
     pageEl.innerHTML = `
@@ -1017,15 +1206,59 @@ function renderBilling() {
                     <div class="panel-subtitle">Cost by provider</div>
                 </div>
                 <div class="panel-content">
-                    ${Object.entries(providerBreakdown).length > 0 ? 
+                    ${Object.entries(providerBreakdown).length > 0 ?
                         Object.entries(providerBreakdown).slice(0, 5).map(([provider, cost]) => `
                             <div class="panel-row">
                                 <span class="panel-label">${provider}</span>
                                 <span class="panel-value">${formatCost(cost)}</span>
                             </div>
-                        `).join('') : 
+                        `).join('') :
                         `<div class="panel-row">
                             <span class="panel-label">No provider data</span>
+                            <span class="panel-value">--</span>
+                        </div>`
+                    }
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Model Breakdown</div>
+                    <div class="panel-subtitle">Cost by model</div>
+                </div>
+                <div class="panel-content">
+                    ${Object.entries(modelBreakdown).length > 0 ?
+                        Object.entries(modelBreakdown).slice(0, 5).map(([model, cost]) => `
+                            <div class="panel-row">
+                                <span class="panel-label">${formatShortLabel(model, 22)}</span>
+                                <span class="panel-value">${formatCost(cost)}</span>
+                            </div>
+                        `).join('') :
+                        `<div class="panel-row">
+                            <span class="panel-label">No model data</span>
+                            <span class="panel-value">--</span>
+                        </div>`
+                    }
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">Billing Mode Breakdown</div>
+                    <div class="panel-subtitle">Events by billing tier</div>
+                </div>
+                <div class="panel-content">
+                    ${Object.entries(billableModeBreakdown).length > 0 ?
+                        Object.entries(billableModeBreakdown).slice(0, 6).map(([mode, count]) => {
+                            const tone = mode === 'billable' ? 'badge-success' : mode === 'free' ? 'badge-info' : 'badge-default';
+                            return `
+                            <div class="panel-row">
+                                <span class="panel-label"><span class="badge ${tone}">${mode}</span></span>
+                                <span class="panel-value">${Number(count).toLocaleString('en-US')} events</span>
+                            </div>`;
+                        }).join('') :
+                        `<div class="panel-row">
+                            <span class="panel-label">No mode data</span>
                             <span class="panel-value">--</span>
                         </div>`
                     }
@@ -1038,13 +1271,15 @@ function renderBilling() {
 // Models page
 async function loadModels() {
     try {
-        const [data, usage, proxyState, proxyBackends, proxyMetrics, trafficSplit] = await Promise.all([
+        const [data, usage, proxyState, proxyBackends, proxyMetrics, trafficSplit, embeddingStatus, ragHealth] = await Promise.all([
             fetchAPI('/control-api/models'),
             fetchAPI('/control-api/usage?limit=40'),
             fetchAPI('/control-api/proxy/state').catch(() => null),
             fetchAPI('/control-api/proxy/backends').catch(() => null),
             fetchAPI('/control-api/proxy/metrics').catch(() => null),
-            fetchAPI('/control-api/traffic-split').catch(() => null)
+            fetchAPI('/control-api/traffic-split').catch(() => null),
+            fetchAPI('/control-api/embedding-status').catch(() => null),
+            fetchAPI('/control-api/rag/health').catch(() => null)
         ]);
         proxyStateData = proxyState;
         proxyBackendsData = proxyBackends;
@@ -1063,7 +1298,7 @@ async function loadModels() {
             successRate: proxySummary.success_rate ?? proxyMetrics?.success_rate ?? null,
             avgLatency: proxySummary.avg_latency ?? proxyMetrics?.avg_latency ?? null,
         };
-        modelsData = { ...data, recent_usage: usage, proxy_runtime: proxyRuntime };
+        modelsData = { ...data, recent_usage: usage, proxy_runtime: proxyRuntime, embedding_status: embeddingStatus, rag_health: ragHealth };
         renderModels();
     } catch (error) {
         throw error;
@@ -1077,11 +1312,12 @@ function renderModels() {
 
     const trafficSplit = trafficSplitData || { core_a: 60, core_b: 30, core_c: 10 };
     const summary = data.summary || {};
+    const embeddingStatus = data.embedding_status || null;
     const models = data.models || [];
     const providers = data.providers || [];
     const ollamaModels = data.ollama?.models || [];
     const remoteOllama = data.remote_ollama || { host: 'vannt-work-op', slots: [] };
-    const remoteSlot11434 = remoteOllama.slots.find(slot => Number(slot.port) === 11434) || { model: 'gemma4:e4b', enabled: true, healthy: false, warm: false, available_models: ['gemma4:e4b', 'deepseek-r1:8b', 'qwen3-vl:8b', 'gemma3:12b'], backing_port: 11534 };
+    const remoteSlot11434 = remoteOllama.slots.find(slot => Number(slot.port) === 11434) || { model: 'gemma4:e4b', enabled: true, healthy: false, warm: false, available_models: ['tuetue4:e4b', 'gemma4:e4b', 'deepseek-r1:8b', 'qwen3-vl:8b', 'gemma3:12b'], backing_port: 11534 };
     const remoteSlot11435 = remoteOllama.slots.find(slot => Number(slot.port) === 11435) || { model: null, enabled: false, healthy: false, warm: false, available_models: ['off'], backing_port: 11534 };
     const remotePrimaryLabel = remoteSlot11434.backing_port ? `Cổng ${remoteSlot11434.backing_port}` : 'Cổng 11534';
     const uniqueModels = (models = []) => [...new Set((Array.isArray(models) ? models : []).filter(Boolean))].filter(model => model !== 'off');
@@ -1094,7 +1330,71 @@ function renderModels() {
 
     const localProviders = providers.filter(provider => String(provider.type).includes('ollama_local'));
     const remoteProviders = providers.filter(provider => String(provider.type).includes('ollama_remote'));
+
+    const _ollamaWarmColor = s => s.warm_status === 'warm' ? '#22c55e' : s.warm_status === 'cold' ? '#f59e0b' : '#334155';
+    const _ollamaWarmLabel = s => s.warm_status === 'warm' ? 'Warm' : s.warm_status === 'cold' ? 'Cold' : 'Unknown';
+    const _ollamaTimeInfo = s => {
+        const _ts = iso => { if (!iso) return null; const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z'); return isNaN(d) ? null : d; };
+        const _fmt = d => d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const _ago = d => { const m = Math.floor((Date.now() - d) / 60000); return m < 1 ? '<1m' : m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + (m % 60 ? (m % 60) + 'm' : ''); };
+        const rows = [];
+        const warmedAt = _ts(s.last_warmed_at);
+        const checkedAt = _ts(s.last_checked_at);
+        if (warmedAt) rows.push(`<span style="color:#22c55e">▲</span> warm ${_fmt(warmedAt)} <span style="color:#64748b">${_ago(warmedAt)} ago</span>${s.last_warm_latency_ms != null ? ' · ' + s.last_warm_latency_ms + 'ms' : ''}`);
+        if (s.last_cold_latency_ms != null) rows.push(`<span style="color:#f59e0b">▼</span> cold probe · ${s.last_cold_latency_ms}ms`);
+        if (checkedAt) rows.push(`<span style="color:#475569">✓</span> checked ${_fmt(checkedAt)}`);
+        return rows.map(r => `<div style="line-height:1.6">${r}</div>`).join('');
+    };
     const cloudProviders = providers.filter(provider => String(provider.type).includes('cli_proxy'));
+    const gptDirectProviders = providers.filter(provider => String(provider.type).includes('gpt_direct'));
+
+    // --- Light color helpers ---
+    // 3-state health: green=ok, red=enabled-but-unhealthy, grey=disabled/unknown
+    const _liveLight = (ok, anyEnabled) => ok ? '#22c55e' : anyEnabled ? '#ef4444' : '#334155';
+    // 4-state with traffic: amber=healthy-but-0%-traffic (bypassed), red=unhealthy, grey=disabled
+    const _trafficLight = (ok, anyEnabled, pct) => {
+        if (!anyEnabled) return '#334155';
+        if ((pct ?? -1) === 0) return '#f59e0b';
+        return ok ? '#22c55e' : '#ef4444';
+    };
+
+    // Core A: Ollama group (local + remote)
+    const coreAOk = summary.ollama_status === 'healthy'
+        || localProviders.some(p => p.enabled && p.health === 'healthy')
+        || remoteProviders.some(p => p.enabled && p.health === 'healthy');
+    const coreAEnabled = localProviders.some(p => p.enabled) || remoteProviders.some(p => p.enabled);
+    const coreALight = _trafficLight(coreAOk, coreAEnabled, trafficSplit.core_a);
+
+    // Core B: CLI Proxy
+    const coreBOk = cloudProviders.some(p => p.enabled && p.health === 'healthy');
+    const coreBEnabled = cloudProviders.some(p => p.enabled);
+    const coreBLight = _trafficLight(coreBOk, coreBEnabled, trafficSplit.core_b);
+    const coreBCount = cloudProviders.filter(p => p.enabled).length;
+
+    // Core C: GPT Direct
+    const coreCOk = gptDirectProviders.some(p => p.enabled && p.health === 'healthy');
+    const coreCEnabled = gptDirectProviders.some(p => p.enabled);
+    const coreCLight = _trafficLight(coreCOk, coreCEnabled, trafficSplit.core_c);
+    const coreCLabel = gptDirectProviders.length > 0
+        ? gptDirectProviders.filter(p => p.enabled).map(p => (p.model || p.name || '').split(':')[0]).filter(Boolean).join(', ') || 'GPT Direct'
+        : 'GPT Direct';
+
+    // Local Ollama
+    const localOllamaH = summary.ollama_status === 'healthy';
+    const localOllamaHLight = localOllamaH ? '#22c55e' : summary.ollama_status === 'unhealthy' ? '#ef4444' : '#334155';
+    const localOllamaWLight = localOllamaH && ollamaModels.length > 0 ? '#22c55e' : '#334155';
+    const localOllamaWLabel = localOllamaH && ollamaModels.length > 0 ? 'Warm' : 'Cool';
+    const localOllamaModelLabel = ollamaModels.length > 0 ? `${ollamaModels.length} models` : 'no models';
+
+    // RAG-V2
+    const ragHealthData = data.rag_health || null;
+    const ragOk = ragHealthData?.healthy === true || ragHealthData?.status === 'healthy';
+    const ragLight = ragHealthData ? (ragOk ? '#22c55e' : '#ef4444') : '#334155';
+    const ragLabel = ragHealthData ? (ragOk ? 'Healthy' : 'Error') : 'No data';
+
+    // Route map derived lights
+    const _ctrlCoreLight = (proxyRuntime.status === 'healthy' || proxyRuntime.healthyCount > 0) ? '#22c55e' : proxyRuntime.status ? '#ef4444' : '#334155';
+
     const apiRuntime = {
         status: 'healthy',
         role: 'canonical',
@@ -1135,6 +1435,12 @@ function renderModels() {
                 <div class="kpi-value ${summary.ollama_status === 'healthy' ? 'good' : 'warning'}">${(summary.ollama_status || 'unknown').toUpperCase()}</div>
                 <div class="kpi-trend"><i class="fas fa-server"></i><span>${summary.ollama_model_count || 0} local models</span></div>
             </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Embedding</div>
+                <div class="kpi-title">Embed Provider</div>
+                <div class="kpi-value ${embeddingStatus?.healthy ? 'good' : (embeddingStatus ? 'warning' : 'neutral')}">${embeddingStatus?.healthy ? 'OK' : (embeddingStatus ? 'DOWN' : 'N/A')}</div>
+                <div class="kpi-trend"><i class="fas fa-vector-square"></i><span>${embeddingStatus?.model || embeddingStatus?.provider || 'unavailable'}</span></div>
+            </div>
         </div>
 
         <div class="panel-grid" style="margin-bottom: 24px;">
@@ -1145,7 +1451,7 @@ function renderModels() {
                         <div class="panel-subtitle">Serving flow map</div>
                     </div>
                     <div class="panel-actions-inline">
-                        <span class="status-badge status-neutral">Draft map</span>
+                        <span class="status-badge status-neutral">Live</span>
                     </div>
                 </div>
                 <div class="panel-content" style="padding-top: 8px; overflow-x:auto;">
@@ -1159,7 +1465,7 @@ function renderModels() {
                             <div style="display:flex; flex-direction:column; align-items:center; gap:8px; min-width:153px;">
                                 <div style="display:flex; flex-direction:column; gap:7px; justify-content:flex-start; width:100%; padding:9px 12px; border:1px solid rgba(148,163,184,.2); border-radius:16px; background:rgba(15,23,42,.22);">
                                     <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:9px; height:9px; border-radius:999px; background:${proxyRuntime.status === 'healthy' || proxyRuntime.healthyCount > 0 ? '#22c55e' : '#ef4444'}; display:inline-block;"></span>Health</div>
-                                    <div style="font-size:15px; font-weight:700; line-height:1.1;">Proxy 8015</div>
+                                    <div style="font-size:15px; font-weight:700; line-height:1.1;">Proxy v2 (8325)</div>
                                 </div>
                                 <div style="width:0; height:3px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                 <div style="display:flex; flex-direction:column; gap:5px; width:100%; padding:7px 9px; border:1px dashed rgba(148,163,184,.22); border-radius:12px; background:rgba(15,23,42,.12);">
@@ -1202,7 +1508,7 @@ function renderModels() {
                             </div>
                             <div style="width:18px; height:0; border-top:1px dashed rgba(148,163,184,.28); margin-top:28px;"></div>
                             <div style="display:flex; flex-direction:column; gap:6px; min-width:128px; padding:9px 11px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18);">
-                                <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Health</div>
+                                <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:${ragLight}; display:inline-block;"></span>${ragLabel}</div>
                                 <div style="font-size:13px; font-weight:700; line-height:1.1;">RAG-V2</div>
                             </div>
                         </div>
@@ -1221,7 +1527,7 @@ function renderModels() {
                                 <div style="display:flex; flex-direction:column; align-items:center; gap:6px; width:200px;">
                                     <div style="width:0; height:8px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:6px; width:100%; padding:9px 11px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); box-shadow:0 0 0 1px rgba(34,197,94,.08) inset;">
-                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:#22c55e; display:inline-block;"></span>Control Core</div>
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span style="width:8px; height:8px; border-radius:999px; background:${_ctrlCoreLight}; display:inline-block;"></span>Control Core</div>
                                         <div style="font-size:12px; font-weight:700; line-height:1.2;">Execution Lane Orchestration</div>
                                     </div>
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
@@ -1261,8 +1567,9 @@ function renderModels() {
                                 <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; min-width:0;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; min-width:0; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
-                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span id="core-a-status-light" style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core A</div>
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span id="core-a-status-light" style="width:8px; height:8px; border-radius:999px; background:${coreALight}; display:inline-block;"></span>Core A</div>
                                         <div style="font-size:11px; font-weight:700; line-height:1.2;">Ollama Group</div>
+                                        <div style="font-size:9px; color:var(--text-muted)">${trafficSplit.core_a ?? '--'}% traffic</div>
                                     </div>
                                     <div style="width:0; height:18px; border-left:1px dashed rgba(148,163,184,.24);"></div>
                                     <div style="display:flex; flex-direction:column; gap:8px; width:286px; margin-left:14px; margin-top:4px; align-self:flex-start;">
@@ -1273,15 +1580,15 @@ function renderModels() {
                                                     <div style="font-size:10px; color:#94a3b8;">vannt-home-pc</div>
                                                 </div>
                                                 <select style="width:100%; height:30px; border-radius:8px; border:1px solid rgba(148,163,184,.18); background:rgba(2,6,23,.55); color:#e2e8f0; font-size:11px; padding:0 8px;">
-                                                    <option>off</option>
-                                                    <option>Gemma3:4b</option>
-                                                    <option>Qwen3-vl:4b</option>
+                                                    <option value="off">off</option>
+                                                    ${ollamaModels.map(m => `<option value="${escapeHtml(m.name || m)}">${escapeHtml(m.name || m)}</option>`).join('')}
+                                                    ${ollamaModels.length === 0 ? '<option disabled>no models found</option>' : ''}
                                                 </select>
                                                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                                    <button class="btn-mini">Warm</button>
+                                                    <span style="font-size:9px; color:var(--text-muted)">${localOllamaModelLabel}</span>
                                                     <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
-                                                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Warm</span>
-                                                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:#334155; display:inline-block;"></span>Healthy</span>
+                                                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:${localOllamaWLight}; display:inline-block;"></span>${localOllamaWLabel}</span>
+                                                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:8px; height:8px; border-radius:999px; background:${localOllamaHLight}; display:inline-block;"></span>Healthy</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1297,12 +1604,17 @@ function renderModels() {
                                                             <option value="off" ${!remoteSlot11434.enabled || !remoteSlot11434.model ? 'selected' : ''}>off</option>
                                                             ${remoteSlot11434Options.map(model => `<option value="${model}" ${remoteSlot11434.model === model && remoteSlot11434.enabled ? 'selected' : ''}>${model}</option>`).join('')}
                                                         </select>
-                                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                                            <button class="btn-mini" data-action="remote-ollama-save" data-port="11434">Apply</button>
+                                                        <div style="display:flex; flex-direction:column; gap:4px;">
+                                                            <div style="display:flex; align-items:center; gap:6px;">
+                                                                <button class="btn-mini" data-action="remote-ollama-save" data-port="11434">Apply</button>
+                                                                <button class="btn-mini" data-action="remote-ollama-probe" data-port="11434">Probe</button>
+                                                                <button class="btn-mini" data-action="remote-ollama-warm" data-port="11434">Warm</button>
+                                                            </div>
                                                             <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
-                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11434-warm-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11434.warm ? '#22c55e' : '#334155'}; display:inline-block;"></span>Warm</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11434-warm-light" style="width:8px; height:8px; border-radius:999px; background:${_ollamaWarmColor(remoteSlot11434)}; display:inline-block;"></span><span id="remote-11434-warm-text">${_ollamaWarmLabel(remoteSlot11434)}</span></span>
                                                                 <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11434-healthy-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11434.healthy ? '#22c55e' : '#334155'}; display:inline-block;"></span>Healthy</span>
                                                             </div>
+                                                            <div id="remote-11434-time-info" style="font-size:10px; color:var(--text-muted); margin-top:2px;">${_ollamaTimeInfo(remoteSlot11434)}</div>
                                                         </div>
                                                     </div>
                                                     ${showSecondaryRemoteSlot ? `
@@ -1312,12 +1624,17 @@ function renderModels() {
                                                             <option value="off" ${!remoteSlot11435.enabled || !remoteSlot11435.model ? 'selected' : ''}>off</option>
                                                             ${remoteSlot11435Options.map(model => `<option value="${model}" ${remoteSlot11435.model === model && remoteSlot11435.enabled ? 'selected' : ''}>${model}</option>`).join('')}
                                                         </select>
-                                                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                                            <button class="btn-mini" data-action="remote-ollama-save" data-port="11435">Apply</button>
+                                                        <div style="display:flex; flex-direction:column; gap:4px;">
+                                                            <div style="display:flex; align-items:center; gap:6px;">
+                                                                <button class="btn-mini" data-action="remote-ollama-save" data-port="11435">Apply</button>
+                                                                <button class="btn-mini" data-action="remote-ollama-probe" data-port="11435">Probe</button>
+                                                                <button class="btn-mini" data-action="remote-ollama-warm" data-port="11435">Warm</button>
+                                                            </div>
                                                             <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#94a3b8;">
-                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11435-warm-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11435.warm ? '#22c55e' : '#334155'}; display:inline-block;"></span>Warm</span>
+                                                                <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11435-warm-light" style="width:8px; height:8px; border-radius:999px; background:${_ollamaWarmColor(remoteSlot11435)}; display:inline-block;"></span><span id="remote-11435-warm-text">${_ollamaWarmLabel(remoteSlot11435)}</span></span>
                                                                 <span style="display:flex; align-items:center; gap:4px;"><span id="remote-11435-healthy-light" style="width:8px; height:8px; border-radius:999px; background:${remoteSlot11435.healthy ? '#22c55e' : '#334155'}; display:inline-block;"></span>Healthy</span>
                                                             </div>
+                                                            <div id="remote-11435-time-info" style="font-size:10px; color:var(--text-muted); margin-top:2px;">${_ollamaTimeInfo(remoteSlot11435)}</div>
                                                         </div>
                                                     </div>
                                                     ` : ''}
@@ -1329,15 +1646,17 @@ function renderModels() {
                                 <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; min-width:0;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; min-width:0; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
-                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span id="core-b-status-light" style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core B</div>
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span id="core-b-status-light" style="width:8px; height:8px; border-radius:999px; background:${coreBLight}; display:inline-block;"></span>Core B</div>
                                         <div style="font-size:11px; font-weight:700; line-height:1.2;">CLI Proxy API</div>
+                                        <div style="font-size:9px; color:var(--text-muted)">${trafficSplit.core_b ?? '--'}% · ${coreBCount} provider${coreBCount !== 1 ? 's' : ''}</div>
                                     </div>
                                 </div>
                                 <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; min-width:0;">
                                     <div style="width:0; height:10px; border-left:1px dashed rgba(148,163,184,.28);"></div>
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; min-width:0; padding:8px 10px; border:1px solid rgba(148,163,184,.18); border-radius:14px; background:rgba(15,23,42,.18); min-height:58px; justify-content:flex-start;">
-                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span id="core-c-status-light" style="width:8px; height:8px; border-radius:999px; background:#f8fafc; display:inline-block;"></span>Core C</div>
-                                        <div style="font-size:11px; font-weight:700; line-height:1.2;">Fallback (GPT 5.4)</div>
+                                        <div style="display:flex; align-items:center; gap:6px; color:#94a3b8; font-size:11px;"><span id="core-c-status-light" style="width:8px; height:8px; border-radius:999px; background:${coreCLight}; display:inline-block;"></span>Core C</div>
+                                        <div style="font-size:11px; font-weight:700; line-height:1.2;">GPT Direct</div>
+                                        <div style="font-size:9px; color:var(--text-muted)">${trafficSplit.core_c ?? '--'}% · ${coreCLabel}</div>
                                     </div>
                                 </div>
                             </div>
@@ -1347,23 +1666,6 @@ function renderModels() {
             </div>
         </div>
 
-        <div class="panel-grid">
-            <div class="panel" style="grid-column: 1 / -1;">
-                <div class="panel-header">
-                    <div class="panel-title">Recent Model Traffic</div>
-                    <div class="panel-subtitle">15 recent requests across local / remote / cloud lanes</div>
-                </div>
-                <div class="panel-content panel-scroll-y" style="max-height: 380px;">
-                    ${recentModelTraffic.length > 0 ? recentModelTraffic.map(item => {
-                        const modelName = item.model || item.provider || '--';
-                        const providerType = item.provider_type || '--';
-                        const routeClass = String(providerType).includes('remote') ? 'remote' : (String(providerType).includes('local') ? 'local' : 'cloud/other');
-                        const fallbackClass = item.fallback_used ? 'fallback' : 'primary';
-                        return `<div class="panel-row"><span class="panel-label">${escapeHtml(formatTimestamp(item.timestamp))} · ${escapeHtml(String(modelName))}</span><span class="panel-value">${escapeHtml(String(providerType))} · ${routeClass} · ${fallbackClass} · ${escapeHtml(String(item.status_normalized || item.status || '--'))}</span></div>`;
-                    }).join('') : '<div class="panel-row"><span class="panel-label">No recent traffic</span><span class="panel-value">--</span></div>'}
-                </div>
-            </div>
-        </div>
 
         <div class="table-container table-container-scroll" style="margin-top: 32px;">
             <div class="table-header">Provider Inventory</div>
@@ -1377,17 +1679,19 @@ function renderModels() {
                             <th>Weight</th>
                             <th>Health</th>
                             <th>Route</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${providers.map(provider => `
                             <tr>
-                                <td>${provider.name}</td>
-                                <td>${provider.type}</td>
-                                <td>${provider.model}</td>
+                                <td>${escapeHtml(provider.name)}</td>
+                                <td>${escapeHtml(provider.type)}</td>
+                                <td>${escapeHtml(provider.model)}</td>
                                 <td>${provider.weight}</td>
                                 <td>${renderStatusWithDot(provider.health || 'unknown', provider.health === 'healthy' ? 'healthy' : 'unhealthy')}</td>
-                                <td>${provider.enabled ? 'ON' : 'OFF'}</td>
+                                <td><span class="badge ${provider.enabled ? 'badge-success' : 'badge-default'}">${provider.enabled ? 'ON' : 'OFF'}</span></td>
+                                <td><button class="btn-mini ${provider.enabled ? 'btn-mini-danger' : ''}" data-action="toggle-provider" data-target="${escapeHtml(provider.name)}" data-enabled="${provider.enabled ? '1' : '0'}">${provider.enabled ? 'Disable' : 'Enable'}</button></td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -1395,9 +1699,9 @@ function renderModels() {
             </div>
         </div>
 
-        <div class="table-container table-container-scroll" style="margin-top: 32px;">
+        <div class="table-container" style="margin-top: 32px;">
             <div class="table-header">Recent Control Actions</div>
-            <div id="models-actions-history" class="table-loading table-scroll-y">Loading action history...</div>
+            <div id="models-actions-history" class="table-loading">Loading...</div>
         </div>
     `;
 
@@ -1406,10 +1710,10 @@ function renderModels() {
             btn.disabled = true;
             try {
                 const result = await runControlAction('model_warmup', btn.dataset.target, 20);
-                alert(result.message || 'Model warmed');
+                showToast(result.message || 'Model warmed up', 'success');
                 await loadModels();
             } catch (error) {
-                alert(`Model warm-up failed: ${error.message}`);
+                showToast(`Model warm-up failed: ${error.message}`, 'error');
             } finally {
                 btn.disabled = false;
             }
@@ -1438,7 +1742,7 @@ function renderModels() {
     saveBtn?.addEventListener('click', async () => {
         const { a, b, c } = recalcTrafficSplit();
         if (c < 0) {
-            alert('Core A + Core B must be <= 100');
+            showToast('Core A + Core B must be ≤ 100', 'warning');
             return;
         }
         saveBtn.disabled = true;
@@ -1458,7 +1762,7 @@ function renderModels() {
                 saveBtn.disabled = false;
             }, 900);
         } catch (error) {
-            alert(`Failed to update traffic split: ${error.message}`);
+            showToast(`Failed to update traffic split: ${error.message}`, 'error');
             saveBtn.textContent = 'Save';
             saveBtn.disabled = false;
         }
@@ -1526,13 +1830,67 @@ function renderModels() {
                 btn.textContent = 'Saved';
                 await loadModels();
             } catch (error) {
-                alert(`Failed to update remote slot ${port}: ${error.message}`);
+                showToast(`Failed to update remote slot ${port}: ${error.message}`, 'error');
                 btn.textContent = originalText;
             } finally {
                 setTimeout(() => {
                     btn.disabled = false;
                     btn.textContent = originalText;
                 }, 700);
+            }
+        });
+    });
+    function _applyOllamaSlotUI(port, result) {
+        const ws = result.warm_status || (result.warm ? 'warm' : 'unknown');
+        const warmColor = ws === 'warm' ? '#22c55e' : ws === 'cold' ? '#f59e0b' : '#334155';
+        const warmLabel = ws === 'warm' ? 'Warm' : ws === 'cold' ? 'Cold' : 'Unknown';
+        const warmLight = document.getElementById(`remote-${port}-warm-light`);
+        const warmText = document.getElementById(`remote-${port}-warm-text`);
+        const healthyLight = document.getElementById(`remote-${port}-healthy-light`);
+        const timeInfo = document.getElementById(`remote-${port}-time-info`);
+        if (warmLight) warmLight.style.background = warmColor;
+        if (warmText) warmText.textContent = warmLabel;
+        if (result.healthy !== undefined && healthyLight)
+            healthyLight.style.background = result.healthy ? '#22c55e' : '#334155';
+        if (timeInfo) timeInfo.innerHTML = _ollamaTimeInfo(result);
+    }
+
+    pageEl.querySelectorAll('[data-action="remote-ollama-probe"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const port = btn.dataset.port;
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Probing...';
+            try {
+                const result = await fetchAPI(`/control-api/remote-ollama/slots/${port}/probe`, { method: 'POST' });
+                _applyOllamaSlotUI(port, result);
+                btn.textContent = 'Done';
+                if (result.message) console.log('Probe result:', result.message);
+            } catch (error) {
+                console.warn(`Probe failed for slot ${port}:`, error);
+                btn.textContent = 'Probe';
+            } finally {
+                setTimeout(() => { btn.disabled = false; btn.textContent = originalText; }, 1500);
+            }
+        });
+    });
+
+    pageEl.querySelectorAll('[data-action="remote-ollama-warm"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const port = btn.dataset.port;
+            btn.disabled = true;
+            btn.textContent = 'Warming...';
+            try {
+                const result = await fetchAPI(`/control-api/remote-ollama/slots/${port}/warm`, { method: 'POST' });
+                _applyOllamaSlotUI(port, result);
+                const label = result.warm_status === 'warm' ? 'Done ✓' : 'Done';
+                showToast(result.message || `Slot ${port} warm-up done`, result.warm_status === 'warm' ? 'success' : 'info');
+                btn.textContent = label;
+            } catch (error) {
+                showToast(`Warm failed: ${error.message}`, 'error');
+                btn.textContent = 'Warm';
+            } finally {
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Warm'; }, 2000);
             }
         });
     });
@@ -1544,9 +1902,9 @@ function renderModels() {
             try {
                 const result = await runControlAction(isEnabled ? 'provider_disable' : 'provider_enable', btn.dataset.target);
                 await loadModels();
-                alert(result.message || (isEnabled ? 'Provider disabled' : 'Provider enabled'));
+                showToast(result.message || (isEnabled ? 'Provider disabled' : 'Provider enabled'), 'success');
             } catch (error) {
-                alert(`Provider toggle failed: ${error.message}`);
+                showToast(`Provider toggle failed: ${error.message}`, 'error');
             } finally {
                 btn.disabled = false;
             }
@@ -1557,14 +1915,87 @@ function renderModels() {
 }
 
 // System page
-async function loadSystem() {
+let _surfacePings = {};
+
+async function probeSurface(url) {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 4000);
     try {
-        const data = await fetchAPI('/control-api/system');
-        systemData = data;
-        renderSystem();
-    } catch (error) {
-        throw error;
+        await fetch(url, { mode: 'no-cors', signal: controller.signal });
+        return 'healthy';
+    } catch {
+        return 'unreachable';
+    } finally {
+        clearTimeout(tid);
     }
+}
+
+async function loadSystem() {
+    systemData = await fetchAPI('/control-api/system');
+    renderSystem();
+
+    // Background: surface probes + memory + RAG health
+    Promise.allSettled([
+        probeSurface('https://console.tuetue.vn'),
+        probeSurface('https://chat.tuetue.vn'),
+        fetchAPI('/control-api/system/memory').catch(() => null),
+        fetchAPI('/control-api/rag/health').catch(() => null)
+    ]).then(([consolePing, chatPing, memResult, ragResult]) => {
+        _surfacePings = {
+            console: consolePing.status === 'fulfilled' ? consolePing.value : 'unknown',
+            chat: chatPing.status === 'fulfilled' ? chatPing.value : 'unknown'
+        };
+
+        // Patch surface health cells
+        const pageEl = document.getElementById('page-system');
+        if (pageEl.classList.contains('active')) {
+            const surfaces = { 'console.tuetue.vn': _surfacePings.console, 'chat.tuetue.vn': _surfacePings.chat };
+            pageEl.querySelectorAll('.panel-row').forEach(row => {
+                const label = row.querySelector('.panel-label')?.textContent?.trim();
+                if (label && surfaces[label] !== undefined) {
+                    const tone = getStatusTone(surfaces[label]);
+                    const valueEl = row.querySelector('.panel-value');
+                    if (valueEl) {
+                        const roleSpan = valueEl.querySelector('.badge');
+                        const roleText = roleSpan ? valueEl.textContent.replace(roleSpan.textContent, '').replace(/^\s*·\s*/, '').trim() : '';
+                        valueEl.innerHTML = `<span class="badge ${tone}">${surfaces[label]}</span>${roleText ? ' · ' + roleText : ''}`;
+                    }
+                }
+            });
+        }
+
+        // Patch memory panel
+        const mem = memResult.status === 'fulfilled' ? memResult.value : null;
+        if (mem) {
+            const fmt = v => v != null ? `${Number(v).toFixed(1)} MB` : '—';
+            const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+            setEl('mem-openclaw', fmt(mem.openclaw_mb));
+            setEl('mem-rag', fmt(mem.rag_mb));
+            setEl('mem-total', fmt(mem.total_mb));
+            setEl('mem-ts', mem.timestamp ? new Date(mem.timestamp).toLocaleTimeString('vi-VN') : '—');
+        } else {
+            const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+            setEl('mem-openclaw', 'unavailable'); setEl('mem-rag', 'unavailable');
+            setEl('mem-total', 'unavailable'); setEl('mem-ts', '—');
+        }
+
+        // Patch RAG health panel
+        const rag = ragResult.status === 'fulfilled' ? ragResult.value : null;
+        if (rag) {
+            const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+            const tone = rag.status === 'ok' ? 'badge-success' : 'badge-danger';
+            const svcTone = rag.service_status === 'operational' ? 'badge-success' : (rag.service_status === 'degraded' ? 'badge-warning' : 'badge-danger');
+            const statusEl = document.getElementById('rag-status');
+            if (statusEl) statusEl.innerHTML = `<span class="badge ${tone}">${rag.status || '—'}</span>`;
+            const svcEl = document.getElementById('rag-service-status');
+            if (svcEl) svcEl.innerHTML = `<span class="badge ${svcTone}">${rag.service_status || '—'}</span>`;
+            const detEl = document.getElementById('rag-details');
+            if (detEl) detEl.textContent = rag.details ? JSON.stringify(rag.details).slice(0, 80) : '—';
+        } else {
+            const statusEl = document.getElementById('rag-status');
+            if (statusEl) statusEl.innerHTML = `<span class="badge badge-default">unavailable</span>`;
+        }
+    });
 }
 
 function renderSystem() {
@@ -1580,13 +2011,11 @@ function renderSystem() {
     const surfaceHealth = [
         { name: 'api.tuetue.vn', role: 'runtime core', status: summary.overall_status || 'unknown' },
         { name: 'control.tuetue.vn', role: 'operator surface', status: 'healthy' },
-        { name: 'console.tuetue.vn', role: 'developer portal', status: 'unknown' },
-        { name: 'chat.tuetue.vn', role: 'product chat', status: 'unknown' }
+        { name: 'console.tuetue.vn', role: 'developer portal', status: _surfacePings.console || 'probing' },
+        { name: 'chat.tuetue.vn', role: 'product chat', status: _surfacePings.chat || 'probing' }
     ];
 
     pageEl.innerHTML = `
-        <div class="toast-container" id="toast-container"></div>
-
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">System</div>
@@ -1644,27 +2073,26 @@ function renderSystem() {
         <div class="panel-grid" style="margin-bottom: 32px;">
             <div class="panel">
                 <div class="panel-header">
-                    <div class="panel-title">System Priorities</div>
-                    <div class="panel-subtitle">What this control plane should care about first</div>
+                    <div class="panel-title">Memory Usage</div>
+                    <div class="panel-subtitle">Service memory snapshot</div>
                 </div>
-                <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Primary Surface</span><span class="panel-value">api.tuetue.vn runtime core</span></div>
-                    <div class="panel-row"><span class="panel-label">Operator Focus</span><span class="panel-value">control.tuetue.vn as active control plane</span></div>
-                    <div class="panel-row"><span class="panel-label">Product Surface</span><span class="panel-value">chat.tuetue.vn health and route quality</span></div>
-                    <div class="panel-row"><span class="panel-label">Developer Surface</span><span class="panel-value">console.tuetue.vn visibility and auth continuity</span></div>
+                <div class="panel-content" id="system-memory-panel">
+                    <div class="panel-row"><span class="panel-label">OpenClaw</span><span class="panel-value" id="mem-openclaw">—</span></div>
+                    <div class="panel-row"><span class="panel-label">RAG Service</span><span class="panel-value" id="mem-rag">—</span></div>
+                    <div class="panel-row"><span class="panel-label">Total</span><span class="panel-value" id="mem-total">—</span></div>
+                    <div class="panel-row"><span class="panel-label">Sampled</span><span class="panel-value" id="mem-ts" style="font-size:11px; color:var(--text-muted);">loading…</span></div>
                 </div>
             </div>
 
             <div class="panel">
                 <div class="panel-header">
-                    <div class="panel-title">Operator Domains</div>
-                    <div class="panel-subtitle">Control responsibility map</div>
+                    <div class="panel-title">RAG Health</div>
+                    <div class="panel-subtitle">Knowledge base service status</div>
                 </div>
-                <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Runtime</span><span class="panel-value">API health, routing, latency, fallback</span></div>
-                    <div class="panel-row"><span class="panel-label">Models</span><span class="panel-value">Warmup, provider posture, ollama inventory</span></div>
-                    <div class="panel-row"><span class="panel-label">Data</span><span class="panel-value">RAG docs, queues, datasets, event archives</span></div>
-                    <div class="panel-row"><span class="panel-label">Operations</span><span class="panel-value">Alerts, actions, maintenance, audit trail</span></div>
+                <div class="panel-content" id="system-rag-panel">
+                    <div class="panel-row"><span class="panel-label">Status</span><span class="panel-value" id="rag-status">loading…</span></div>
+                    <div class="panel-row"><span class="panel-label">Service</span><span class="panel-value" id="rag-service-status">—</span></div>
+                    <div class="panel-row"><span class="panel-label">Details</span><span class="panel-value" id="rag-details" style="font-size:11px;">—</span></div>
                 </div>
             </div>
         </div>
@@ -1902,14 +2330,13 @@ function confirmAction(message, dangerous = false) {
 }
 
 // Usage page
-async function loadUsage() {
-    try {
-        const data = await fetchAPI('/control-api/usage?limit=20');
-        usageData = data;
-        renderUsage();
-    } catch (error) {
-        throw error;
-    }
+let _usageLimit = 20;
+
+async function loadUsage(limit = null) {
+    if (limit !== null) _usageLimit = limit;
+    const data = await fetchAPI(`/control-api/usage?limit=${_usageLimit}`);
+    usageData = data;
+    renderUsage();
 }
 
 function renderUsage() {
@@ -2032,7 +2459,10 @@ function renderUsage() {
         </div>
 
         <div class="table-container table-container-scroll" style="margin-top: 32px;">
-            <div class="table-header">Recent Usage Events</div>
+            <div class="table-header" style="display:flex; align-items:center; justify-content:space-between;">
+                <span>Recent Usage Events</span>
+                <span style="font-size:13px; font-weight:400; color:var(--text-muted);">Showing ${_usageLimit} events</span>
+            </div>
             <div class="table-scroll-y">
                 <table class="table">
                     <thead>
@@ -2059,8 +2489,23 @@ function renderUsage() {
                     </tbody>
                 </table>
             </div>
+            <div style="padding: 14px 20px; border-top: 1px solid var(--border); display:flex; gap:10px; align-items:center;">
+                <button class="btn-mini" id="usage-load-more-50">Load 50</button>
+                <button class="btn-mini" id="usage-load-more-100">Load 100</button>
+                <button class="btn-mini" id="usage-load-more-reset" style="color:var(--text-muted); border-color:rgba(148,163,184,0.2);">Reset</button>
+            </div>
         </div>
     `;
+
+    document.getElementById('usage-load-more-50')?.addEventListener('click', async () => {
+        await loadUsage(50);
+    });
+    document.getElementById('usage-load-more-100')?.addEventListener('click', async () => {
+        await loadUsage(100);
+    });
+    document.getElementById('usage-load-more-reset')?.addEventListener('click', async () => {
+        await loadUsage(20);
+    });
 }
 
 async function loadProxy() {
@@ -2157,7 +2602,7 @@ function renderProxy(proxyMetrics, usageDataPayload) {
                 <div class="kpi-eyebrow">Proxy</div>
                 <div class="kpi-title">Service Status</div>
                 <div class="kpi-value ${serviceTone}">${String(serviceStatus).toUpperCase()}</div>
-                <div class="kpi-trend"><i class="fas fa-route"></i><span>Port 8015 front door</span></div>
+                <div class="kpi-trend"><i class="fas fa-route"></i><span>Port 8325 front door</span></div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Traffic</div>
@@ -2252,7 +2697,8 @@ function renderProxy(proxyMetrics, usageDataPayload) {
     });
 
     document.getElementById('proxy-open-dashboard-btn')?.addEventListener('click', () => {
-        window.open('http://localhost:8015/proxy/dashboard', '_blank');
+        const proxyUrl = `${window.location.protocol}//${window.location.hostname}:8325/`;
+        window.open(proxyUrl, '_blank');
     });
 
     document.getElementById('proxy-run-benchmark-btn')?.addEventListener('click', async () => {
@@ -2297,9 +2743,10 @@ function renderProxy(proxyMetrics, usageDataPayload) {
     document.getElementById('proxy-mode-select')?.addEventListener('change', async (e) => {
         try {
             await updateProxyMode(e.target.value);
+            showToast(`Proxy mode set to ${e.target.value}`, 'success');
             await loadProxy();
         } catch (error) {
-            alert(`Proxy mode update failed: ${error.message}`);
+            showToast(`Proxy mode update failed: ${error.message}`, 'error');
         }
     });
 
@@ -2308,9 +2755,10 @@ function renderProxy(proxyMetrics, usageDataPayload) {
         const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
         try {
             await updateProxyHedge(enabled, delay);
+            showToast(`Hedging ${enabled ? 'enabled' : 'disabled'}`, 'success');
             await loadProxy();
         } catch (error) {
-            alert(`Proxy hedge update failed: ${error.message}`);
+            showToast(`Proxy hedge update failed: ${error.message}`, 'error');
         }
     });
 
@@ -2319,9 +2767,10 @@ function renderProxy(proxyMetrics, usageDataPayload) {
         const delay = parseFloat(document.getElementById('proxy-hedge-delay')?.value || '0.35');
         try {
             await updateProxyHedge(enabled, delay);
+            showToast(`Hedge delay set to ${delay}s`, 'success');
             await loadProxy();
         } catch (error) {
-            alert(`Proxy hedge delay update failed: ${error.message}`);
+            showToast(`Hedge delay update failed: ${error.message}`, 'error');
         }
     });
 
@@ -2330,9 +2779,10 @@ function renderProxy(proxyMetrics, usageDataPayload) {
             const backendId = e.target.getAttribute('data-backend-id');
             try {
                 await toggleProxyBackend(backendId, e.target.checked);
+                showToast(`Backend ${backendId} ${e.target.checked ? 'enabled' : 'disabled'}`, 'success');
                 await loadProxy();
             } catch (error) {
-                alert(`Backend toggle failed: ${error.message}`);
+                showToast(`Backend toggle failed: ${error.message}`, 'error');
             }
         });
     });
@@ -2344,10 +2794,142 @@ function renderProxy(proxyMetrics, usageDataPayload) {
             const weight = parseInt(input?.value || '0', 10);
             try {
                 await updateProxyBackendWeight(backendId, weight);
+                showToast(`Weight for ${backendId} set to ${weight}%`, 'success');
                 await loadProxy();
             } catch (error) {
-                alert(`Backend weight update failed: ${error.message}`);
+                showToast(`Backend weight update failed: ${error.message}`, 'error');
             }
+        });
+    });
+}
+
+// Providers page
+let providersData = null;
+let _providersHours = 24;
+
+async function loadProviders() {
+    const [metrics, recent, stats] = await Promise.allSettled([
+        fetchAPI('/control-api/providers/metrics'),
+        fetchAPI(`/control-api/chat/providers/recent?limit=20`),
+        fetchAPI(`/control-api/chat/providers/stats?hours=${_providersHours}`)
+    ]);
+    providersData = {
+        metrics: metrics.status === 'fulfilled' ? metrics.value : null,
+        recent: recent.status === 'fulfilled' ? recent.value : null,
+        stats: stats.status === 'fulfilled' ? stats.value : null
+    };
+    renderProviders();
+}
+
+function renderProviders() {
+    const pageEl = document.getElementById('page-providers');
+    if (!providersData) return;
+
+    const { metrics, recent, stats } = providersData;
+    const summary = metrics?.summary || {};
+    const recentEvents = recent?.events || [];
+    const providerStats = stats?.stats || {};
+
+    const totalReq = summary.total_requests ?? 0;
+    const successRate = summary.success_rate != null ? `${(Number(summary.success_rate) * 100).toFixed(1)}%` : '--';
+    const avgLatency = summary.avg_latency != null ? `${Number(summary.avg_latency).toFixed(0)} ms` : '--';
+    const provDist = summary.provider_distribution || {};
+    const topProvider = Object.keys(provDist)[0] || '--';
+
+    const perfRows = Object.entries(provDist).map(([name, count]) => {
+        const pStats = providerStats[name] || {};
+        const sr = pStats.success_rate != null ? `${(Number(pStats.success_rate) * 100).toFixed(1)}%` : '--';
+        const lat = pStats.avg_latency != null ? `${Number(pStats.avg_latency).toFixed(0)} ms` : '--';
+        const pct = totalReq > 0 ? `${((count / totalReq) * 100).toFixed(1)}%` : '--';
+        return { name, count, sr, lat, pct };
+    });
+
+    pageEl.innerHTML = `
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
+            <span style="font-size:12px; color:var(--text-muted);">Time window:</span>
+            ${[24, 48, 168].map(h => `
+                <button class="btn-action ${_providersHours === h ? '' : ''}" data-hours="${h}"
+                    style="padding:4px 14px; font-size:12px; ${_providersHours === h ? 'background:var(--accent-purple); color:#fff;' : ''}">
+                    ${h === 168 ? '7d' : h + 'h'}
+                </button>`).join('')}
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Requests</div>
+                <div class="kpi-title">Total Requests</div>
+                <div class="kpi-value neutral">${totalReq.toLocaleString('en-US')}</div>
+                <div class="kpi-trend"><i class="fas fa-exchange-alt"></i><span>Provider selections</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Reliability</div>
+                <div class="kpi-title">Success Rate</div>
+                <div class="kpi-value ${summary.success_rate >= 0.95 ? 'good' : (summary.success_rate >= 0.8 ? 'warning' : 'danger')}">${successRate}</div>
+                <div class="kpi-trend"><i class="fas fa-check-circle"></i><span>Across all providers</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Latency</div>
+                <div class="kpi-title">Avg Response</div>
+                <div class="kpi-value neutral">${avgLatency}</div>
+                <div class="kpi-trend"><i class="fas fa-tachometer-alt"></i><span>Mean selection latency</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Top</div>
+                <div class="kpi-title">Leading Provider</div>
+                <div class="kpi-value neutral" style="font-size:18px;">${escapeHtml(formatShortLabel(topProvider, 16))}</div>
+                <div class="kpi-trend"><i class="fas fa-trophy"></i><span>Most selected</span></div>
+            </div>
+        </div>
+
+        <div class="panel-grid" style="margin-bottom:28px;">
+            <div class="panel" style="grid-column: 1 / -1;">
+                <div class="panel-header">
+                    <div class="panel-title">Provider Performance</div>
+                    <div class="panel-subtitle">Success rate and latency per provider (${_providersHours === 168 ? '7-day' : _providersHours + 'h'} window)</div>
+                </div>
+                <div class="panel-content">
+                    ${perfRows.length > 0 ? `
+                    <table class="table" style="margin-top:0;">
+                        <thead><tr><th>Provider</th><th>Requests</th><th>Share</th><th>Success Rate</th><th>Avg Latency</th></tr></thead>
+                        <tbody>
+                            ${perfRows.map(r => `
+                                <tr>
+                                    <td><strong>${escapeHtml(r.name)}</strong></td>
+                                    <td>${r.count.toLocaleString('en-US')}</td>
+                                    <td>${r.pct}</td>
+                                    <td><span class="badge ${r.sr !== '--' && parseFloat(r.sr) >= 95 ? 'badge-success' : (r.sr !== '--' && parseFloat(r.sr) >= 80 ? 'badge-warning' : 'badge-danger')}">${r.sr}</span></td>
+                                    <td>${r.lat}</td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>` : '<div class="panel-row"><span class="panel-label">No provider metrics available</span><span class="panel-value">--</span></div>'}
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="table-header">Recent Provider Selections <span style="font-size:11px; color:var(--text-muted); font-weight:400;">(last 20 events)</span></div>
+            ${recentEvents.length > 0 ? `
+            <table class="table">
+                <thead><tr><th>Time</th><th>Provider</th><th>Model</th><th>Latency</th><th>Status</th><th>Fallback</th></tr></thead>
+                <tbody>
+                    ${recentEvents.slice(0, 20).map(ev => `
+                        <tr>
+                            <td>${formatTimestamp(ev.timestamp || ev.created_at)}</td>
+                            <td>${escapeHtml(ev.provider || ev.provider_type || '--')}</td>
+                            <td>${escapeHtml(formatShortLabel(ev.model || '--', 24))}</td>
+                            <td>${ev.latency_ms != null ? Number(ev.latency_ms).toFixed(0) + ' ms' : (ev.latency != null ? Number(ev.latency * 1000).toFixed(0) + ' ms' : '--')}</td>
+                            <td><span class="badge ${getStatusTone(ev.status || ev.status_normalized)}">${escapeHtml(ev.status || ev.status_normalized || '--')}</span></td>
+                            <td>${ev.fallback_used ? '<span class="badge badge-warning">fallback</span>' : '<span style="color:var(--text-muted);">—</span>'}</td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>` : '<div class="empty-state" style="padding:32px 0;"><i class="fas fa-plug"></i><h3>No recent provider events</h3></div>'}
+        </div>
+    `;
+
+    pageEl.querySelectorAll('[data-hours]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            _providersHours = parseInt(btn.dataset.hours, 10);
+            loadProviders();
         });
     });
 }
@@ -2359,7 +2941,7 @@ function renderAbout() {
             <div class="kpi-card">
                 <div class="kpi-eyebrow">About</div>
                 <div class="kpi-title">TTAi Control</div>
-                <div class="kpi-value neutral">v0.1</div>
+                <div class="kpi-value neutral">v0.2</div>
                 <div class="kpi-trend"><i class="fas fa-circle-info"></i><span>Operator dashboard</span></div>
             </div>
             <div class="kpi-card">
@@ -2373,48 +2955,175 @@ function renderAbout() {
         <div class="panel-grid">
             <div class="panel">
                 <div class="panel-header">
-                    <div class="panel-title">What this dashboard is for</div>
-                    <div class="panel-subtitle">High-level guidance</div>
+                    <div class="panel-title">Tab Reference</div>
+                    <div class="panel-subtitle">What each tab does</div>
                 </div>
                 <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Monitor health</span><span class="panel-value">Providers, models, system</span></div>
-                    <div class="panel-row"><span class="panel-label">Operate safely</span><span class="panel-value">Run guarded admin actions</span></div>
-                    <div class="panel-row"><span class="panel-label">Review usage</span><span class="panel-value">Quota, billing, errors, traffic</span></div>
+                    <div class="panel-row"><span class="panel-label">Overview</span><span class="panel-value">Health, cost, quota, recent errors at a glance</span></div>
+                    <div class="panel-row"><span class="panel-label">Quota</span><span class="panel-value">Blocked events by tenant, key, reason</span></div>
+                    <div class="panel-row"><span class="panel-label">Billing</span><span class="panel-value">Estimated cost by tenant, provider, model</span></div>
+                    <div class="panel-row"><span class="panel-label">Errors</span><span class="panel-value">Error signatures, status/HTTP breakdown, recent events</span></div>
+                    <div class="panel-row"><span class="panel-label">Models</span><span class="panel-value">Serving route map, provider inventory, warm-up</span></div>
+                    <div class="panel-row"><span class="panel-label">System</span><span class="panel-value">Memory, RAG health, surface health, workloads</span></div>
+                    <div class="panel-row"><span class="panel-label">Providers</span><span class="panel-value">Per-provider success rate, latency, recent selections</span></div>
+                    <div class="panel-row"><span class="panel-label">Usage</span><span class="panel-value">Event ledger with status breakdown and user/provider stats</span></div>
+                    <div class="panel-row"><span class="panel-label">Users</span><span class="panel-value">Registered accounts with tier, provider, status filter</span></div>
+                    <div class="panel-row"><span class="panel-label">Proxy</span><span class="panel-value">Proxy v2 runtime controls, backend pool, benchmark</span></div>
                 </div>
             </div>
 
             <div class="panel">
                 <div class="panel-header">
-                    <div class="panel-title">How to use</div>
-                    <div class="panel-subtitle">Quick operator notes</div>
+                    <div class="panel-title">Operator Notes</div>
+                    <div class="panel-subtitle">Key behaviors to know</div>
                 </div>
                 <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Models tab</span><span class="panel-value">Warm up and toggle providers</span></div>
-                    <div class="panel-row"><span class="panel-label">System tab</span><span class="panel-value">Run safe maintenance actions</span></div>
-                    <div class="panel-row"><span class="panel-label">Usage / Errors</span><span class="panel-value">Inspect live behavior and failures</span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-header">
-                    <div class="panel-title">Important notes</div>
-                    <div class="panel-subtitle">Current behavior</div>
-                </div>
-                <div class="panel-content">
-                    <div class="panel-row"><span class="panel-label">Healthy vs Enabled</span><span class="panel-value">Health and routing are separate states</span></div>
-                    <div class="panel-row"><span class="panel-label">Guardrails</span><span class="panel-value">Sensitive actions ask for confirmation</span></div>
-                    <div class="panel-row"><span class="panel-label">Feedback</span><span class="panel-value">Toasts show action result quickly</span></div>
+                    <div class="panel-row"><span class="panel-label">Healthy ≠ Enabled</span><span class="panel-value">Health and routing are independent states</span></div>
+                    <div class="panel-row"><span class="panel-label">Confirmations</span><span class="panel-value">Destructive actions require explicit confirm</span></div>
+                    <div class="panel-row"><span class="panel-label">Keyboard R</span><span class="panel-value">Refresh current tab (skip if input focused)</span></div>
+                    <div class="panel-row"><span class="panel-label">Stale cache</span><span class="panel-value">Cached data shown instantly, refreshed silently</span></div>
+                    <div class="panel-row"><span class="panel-label">Surface probes</span><span class="panel-value">Console / Chat health probed async after page load</span></div>
                 </div>
             </div>
         </div>
     `;
 }
 
+// Users page
+let usersData = null;
+
+async function loadUsers() {
+    const data = await fetchAPI('/api/users');
+    usersData = data;
+    renderUsers();
+}
+
+function renderUsers() {
+    const pageEl = document.getElementById('page-users');
+    const data = usersData;
+    if (!data) return;
+
+    const users = data.users || (Array.isArray(data) ? data : []);
+    const total = data.total ?? users.length;
+    const activeCount = users.filter(u => u.is_active !== false).length;
+
+    pageEl.innerHTML = `
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Users</div>
+                <div class="kpi-title">Total Users</div>
+                <div class="kpi-value neutral">${total}</div>
+                <div class="kpi-trend"><i class="fas fa-users"></i><span>Registered accounts</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Active</div>
+                <div class="kpi-title">Active Users</div>
+                <div class="kpi-value good">${activeCount}</div>
+                <div class="kpi-trend"><i class="fas fa-user-check"></i><span>Not suspended</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-eyebrow">Suspended</div>
+                <div class="kpi-title">Suspended</div>
+                <div class="kpi-value ${total - activeCount > 0 ? 'warning' : 'neutral'}">${total - activeCount}</div>
+                <div class="kpi-trend"><i class="fas fa-user-slash"></i><span>is_active = false</span></div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px; margin-bottom:12px; flex-wrap:wrap;">
+            <input id="users-filter-email" type="text" placeholder="Filter by email..." class="input-inline" style="flex:1; min-width:200px; height:34px;">
+            <select id="users-filter-tier" class="auto-refresh-select" style="height:34px;">
+                <option value="">All tiers</option>
+                <option value="free">Free</option>
+                <option value="trial">Trial</option>
+                <option value="pro">Pro</option>
+            </select>
+            <select id="users-filter-status" class="auto-refresh-select" style="height:34px;">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+            </select>
+            <span id="users-filter-count" style="font-size:13px; color:var(--text-muted); align-self:center;"></span>
+        </div>
+
+        <div class="table-container table-container-scroll">
+            <div class="table-scroll-y">
+                <table class="table" id="users-table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Email</th>
+                            <th>Tier</th>
+                            <th>Provider</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        ${_renderUserRows(users)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    function applyUsersFilter() {
+        const emailQ = (document.getElementById('users-filter-email')?.value || '').toLowerCase();
+        const tierQ = document.getElementById('users-filter-tier')?.value || '';
+        const statusQ = document.getElementById('users-filter-status')?.value || '';
+        const filtered = users.filter(u => {
+            const email = (u.email || '').toLowerCase();
+            const tier = u.tier || 'free';
+            const isActive = u.is_active !== false;
+            const status = isActive ? 'active' : 'suspended';
+            if (emailQ && !email.includes(emailQ)) return false;
+            if (tierQ && tier !== tierQ) return false;
+            if (statusQ && status !== statusQ) return false;
+            return true;
+        });
+        const tbody = document.getElementById('users-tbody');
+        const countEl = document.getElementById('users-filter-count');
+        if (tbody) tbody.innerHTML = _renderUserRows(filtered);
+        if (countEl) countEl.textContent = filtered.length < users.length ? `${filtered.length} of ${users.length}` : '';
+    }
+
+    document.getElementById('users-filter-email')?.addEventListener('input', applyUsersFilter);
+    document.getElementById('users-filter-tier')?.addEventListener('change', applyUsersFilter);
+    document.getElementById('users-filter-status')?.addEventListener('change', applyUsersFilter);
+}
+
+function _renderUserRows(users) {
+    if (!users.length) return '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:40px;">No users found</td></tr>';
+    return users.map(u => `
+        <tr>
+            <td><code style="font-size:12px;">${escapeHtml(formatShortLabel(u.user_id || u.id || '--', 20))}</code></td>
+            <td>${escapeHtml(u.email || '--')}</td>
+            <td><span class="badge ${u.tier === 'pro' ? 'badge-success' : u.tier === 'trial' ? 'badge-warning' : 'badge-default'}">${escapeHtml(u.tier || 'free')}</span></td>
+            <td>${escapeHtml(u.auth_provider || u.provider || '--')}</td>
+            <td><span class="badge ${u.is_active === false ? 'badge-danger' : 'badge-success'}">${u.is_active === false ? 'suspended' : 'active'}</span></td>
+            <td>${formatTimestamp(u.created_at)}</td>
+        </tr>
+    `).join('');
+}
+
 // Errors page
+let errorEventsData = null;
+
 async function loadErrors() {
     try {
-        const data = await fetchAPI('/control-api/errors?limit=50&top_n=5');
-        errorsData = data;
+        const [errSummary, usageSnap] = await Promise.allSettled([
+            fetchAPI('/control-api/errors?limit=50&top_n=5'),
+            fetchAPI('/control-api/usage?limit=30')
+        ]);
+        if (errSummary.status === 'rejected') throw errSummary.reason;
+        errorsData = errSummary.value;
+        if (usageSnap.status === 'fulfilled') {
+            const allEvents = usageSnap.value.recent_events || [];
+            const errorStatuses = ['error', 'fail', 'failed', 'quota_exceeded', 'blocked', 'timeout', 'rate_limited'];
+            errorEventsData = allEvents.filter(ev => {
+                const s = String(ev.status_normalized || ev.status || '').toLowerCase();
+                return errorStatuses.some(es => s.includes(es));
+            });
+        }
         renderErrors();
     } catch (error) {
         throw error;
@@ -2437,8 +3146,6 @@ function renderErrors() {
     const needsAttention = errorCount > 0 || topErrorSignatures.length > 0;
     
     pageEl.innerHTML = `
-        <div class="toast-container" id="toast-container"></div>
-
         <div class="kpi-grid">
             <div class="kpi-card">
                 <div class="kpi-eyebrow">Errors</div>
@@ -2578,13 +3285,49 @@ function renderErrors() {
                             <tr>
                                 <td><span class="signature-text">${formatErrorSignature(sig.signature)}</span></td>
                                 <td>${sig.count || 0}</td>
-                                <td>${sig.last_seen || '--'}</td>
+                                <td>${formatTimestamp(sig.last_seen)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
             </div>
         ` : ''}
+
+        ${(() => {
+            const directErrors = (data.recent_errors || []);
+            const fallbackErrors = errorEventsData || [];
+            const events = directErrors.length > 0 ? directErrors : fallbackErrors;
+            const sourceLabel = directErrors.length > 0 ? 'from /errors endpoint' : 'filtered from usage';
+            if (events.length === 0) return '<div class="empty-state" style="margin-top:32px;"><i class="fas fa-check-circle"></i><h3>No recent error events</h3></div>';
+            return `
+            <div class="table-container" style="margin-top: 32px;">
+                <div class="table-header">Recent Error Events <span style="font-size:11px; color:var(--text-muted); font-weight:400;">${sourceLabel}</span></div>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Provider</th>
+                            <th>Model</th>
+                            <th>Status</th>
+                            <th>HTTP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${events.slice(0, 20).map(ev => `
+                            <tr>
+                                <td>${formatTimestamp(ev.timestamp)}</td>
+                                <td><code style="font-size:11px;">${escapeHtml(formatShortLabel(ev.user_id || '--', 20))}</code></td>
+                                <td>${escapeHtml(formatShortLabel(ev.provider || ev.provider_type || '--', 20))}</td>
+                                <td>${escapeHtml(formatShortLabel(ev.model || '--', 24))}</td>
+                                <td><span class="badge ${getStatusTone(ev.status_normalized || ev.status)}">${escapeHtml(ev.status_normalized || ev.status || '--')}</span></td>
+                                <td>${ev.http_status || '--'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        })()}
     `;
 
     pageEl.querySelectorAll('[data-action="errors-refresh-health"]').forEach(btn => {
