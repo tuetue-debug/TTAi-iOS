@@ -24,7 +24,7 @@ args = parser.parse_args()
 from unsloth import FastLanguageModel
 import torch
 
-MAX_SEQ_LEN = 2048
+MAX_SEQ_LEN = 1024   # reduced from 2048 to fit RTX 5060 Ti 16GB VRAM
 DTYPE = None         # auto-detect (bfloat16 on Ampere+)
 LOAD_IN_4BIT = True  # QLoRA — fits 16GB easily
 
@@ -90,7 +90,7 @@ trainer = SFTTrainer(
     dataset_num_proc=2,
     args=TrainingArguments(
         per_device_train_batch_size=args.batch,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=8,
         warmup_steps=10,
         num_train_epochs=args.epochs,
         learning_rate=args.lr,
