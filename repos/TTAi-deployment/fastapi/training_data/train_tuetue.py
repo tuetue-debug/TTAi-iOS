@@ -29,13 +29,13 @@ args = parser.parse_args()
 from unsloth import FastLanguageModel
 import torch
 
-MAX_SEQ_LEN = 2048   # gemma-3-4b-it text-only, fits 16GB fine
+MAX_SEQ_LEN = 1024   # Gemma4 E4B multimodal, keep low for 16GB VRAM
 DTYPE = None         # auto-detect (bfloat16 on Ampere+)
 LOAD_IN_4BIT = True  # QLoRA — fits 16GB easily
 
 print("Loading base model...")
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="unsloth/gemma-3-4b-it",
+    model_name="unsloth/gemma-4-E4B-it",
     max_seq_length=MAX_SEQ_LEN,
     dtype=DTYPE,
     load_in_4bit=LOAD_IN_4BIT,
@@ -45,9 +45,9 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 # ── LoRA adapters ─────────────────────────────────────────────────────────────
 model = FastLanguageModel.get_peft_model(
     model,
-    r=16,
+    r=8,           # reduced from 16 to fit 16GB VRAM
     target_modules=["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"],
-    lora_alpha=32,
+    lora_alpha=16,
     lora_dropout=0,
     bias="none",
     use_gradient_checkpointing="unsloth",
