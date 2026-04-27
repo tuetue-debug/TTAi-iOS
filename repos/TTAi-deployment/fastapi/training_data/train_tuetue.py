@@ -24,7 +24,7 @@ args = parser.parse_args()
 from unsloth import FastLanguageModel
 import torch
 
-MAX_SEQ_LEN = 1024   # reduced from 2048 to fit RTX 5060 Ti 16GB VRAM
+MAX_SEQ_LEN = 512    # reduced to 512 for Gemma4 multimodal on 16GB VRAM
 DTYPE = None         # auto-detect (bfloat16 on Ampere+)
 LOAD_IN_4BIT = True  # QLoRA — fits 16GB easily
 
@@ -89,8 +89,8 @@ trainer = SFTTrainer(
     max_seq_length=MAX_SEQ_LEN,
     dataset_num_proc=2,
     args=TrainingArguments(
-        per_device_train_batch_size=args.batch,
-        gradient_accumulation_steps=8,
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=16,
         warmup_steps=10,
         num_train_epochs=args.epochs,
         learning_rate=args.lr,
@@ -106,6 +106,9 @@ trainer = SFTTrainer(
     ),
 )
 
+import torch
+torch.cuda.empty_cache()
+print(f"Free VRAM before train: {torch.cuda.mem_get_info()[0]/1e9:.1f} GB")
 print("Starting training...")
 trainer.train()
 print("Training complete.")
