@@ -68,18 +68,22 @@ print(f"Loaded {len(raw)} samples from {data_path}")
 CHAT_TEMPLATE = "{% for message in messages %}{{'<start_of_turn>' + message['role'] + '\n' + message['content'] + '<end_of_turn>\n'}}{% endfor %}"
 
 def to_chat(sample: dict) -> dict:
-    system = sample.get("system", "")
-    convs = sample.get("conversations", [])
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    for turn in convs:
-        role = "user" if turn["from"] == "human" else "assistant"
-        messages.append({"role": role, "content": turn["value"]})
+    # Support both ShareGPT format {"conversations": [...]} and messages format {"messages": [...]}
+    if sample.get("messages"):
+        messages = sample["messages"]
+    else:
+        messages = []
+        if sample.get("system"):
+            messages.append({"role": "system", "content": sample["system"]})
+        for turn in sample.get("conversations", []):
+            role = "user" if turn["from"] == "human" else "assistant"
+            messages.append({"role": role, "content": turn["value"]})
+    if not messages:
+        return {"text": ""}
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
     return {"text": text}
 
-dataset = Dataset.from_list([to_chat(s) for s in raw])
+dataset = Dataset.from_list([s for s in (to_chat(r) for r in raw) if s["text"]])
 print(f"Dataset ready: {len(dataset)} samples")
 
 # ── Trainer ───────────────────────────────────────────────────────────────────
