@@ -188,22 +188,22 @@ async function handleDownloadPdf(inv) {
 
     <!-- Usage summary -->
     <article class="panel-card" v-if="overview">
-      <h3 style="margin-top:0">Usage this month</h3>
+      <h3 style="margin-top:0">{{ $t('BillingPage.usageThisMonth') }}</h3>
       <div class="detail-grid">
         <div class="detail-item">
-          <span>Estimated cost</span>
+          <span>{{ $t('BillingPage.estimatedCost') }}</span>
           <strong>${{ Number(overview?.billing?.summary?.estimated_cost_total || 0).toFixed(4) }}</strong>
         </div>
         <div class="detail-item">
-          <span>Billable events</span>
+          <span>{{ $t('BillingPage.billableEvents') }}</span>
           <strong>{{ overview?.billing?.summary?.billable_events || 0 }}</strong>
         </div>
         <div class="detail-item">
-          <span>Top provider</span>
+          <span>{{ $t('BillingPage.topProvider') }}</span>
           <strong>{{ overview?.billing?.summary?.top_provider || '—' }}</strong>
         </div>
         <div class="detail-item">
-          <span>Top model</span>
+          <span>{{ $t('BillingPage.topModel') }}</span>
           <strong>{{ overview?.billing?.summary?.top_model || '—' }}</strong>
         </div>
       </div>
@@ -219,22 +219,22 @@ async function handleDownloadPdf(inv) {
 
       <!-- Current subscription -->
       <article class="panel-card" v-if="subscription">
-        <h3 style="margin-top:0">Current plan</h3>
+        <h3 style="margin-top:0">{{ $t('BillingPage.currentPlan_1') }}</h3>
         <div class="detail-grid">
           <div class="detail-item">
-            <span>Plan</span>
+            <span>{{ $t('BillingPage.plan') }}</span>
             <strong style="text-transform:capitalize">{{ subscription.tier }}</strong>
           </div>
           <div class="detail-item">
-            <span>Status</span>
+            <span>{{ $t('BillingPage.status') }}</span>
             <strong>{{ subscription.status }}</strong>
           </div>
           <div class="detail-item">
-            <span>Expires</span>
+            <span>{{ $t('BillingPage.expires') }}</span>
             <strong>{{ subscription.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : 'Never (Free)' }}</strong>
           </div>
           <div class="detail-item">
-            <span>Requests / month</span>
+            <span>{{ $t('BillingPage.requestsMonth') }}</span>
             <strong>{{ subscription.plan_detail?.quota?.max_requests?.toLocaleString() || '—' }}</strong>
           </div>
         </div>
@@ -244,22 +244,22 @@ async function handleDownloadPdf(inv) {
           style="margin-top:12px; color:#ef4444"
           :disabled="actionLoading"
           @click="handleCancel"
-        >Downgrade to Free</button>
+        >{{ $t('BillingPage.downgradeToFree') }}</button>
       </article>
 
       <!-- Plan selection -->
       <article class="panel-card">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px">
-          <h3 style="margin:0">Upgrade plan</h3>
+          <h3 style="margin:0">{{ $t('BillingPage.upgradePlan') }}</h3>
           <div class="cycle-toggle">
             <button
               :class="['ghost-btn', selectedCycle === 'monthly' ? 'active-cycle' : '']"
               @click="selectedCycle = 'monthly'"
-            >Monthly</button>
+            >{{ $t('BillingPage.monthly') }}</button>
             <button
               :class="['ghost-btn', selectedCycle === 'yearly' ? 'active-cycle' : '']"
               @click="selectedCycle = 'yearly'"
-            >Yearly <span style="color:#22c55e; font-size:12px">Save up to 20%</span></button>
+            >{{ $t('BillingPage.yearly') }} <span style="color:#22c55e; font-size:12px">Save up to 20%</span></button>
           </div>
         </div>
 
@@ -271,7 +271,7 @@ async function handleDownloadPdf(inv) {
           >
             <div class="plan-header">
               <span class="plan-name">{{ plan.name }}</span>
-              <span v-if="plan.key === currentTier" class="plan-badge">Current</span>
+              <span v-if="plan.key === currentTier" class="plan-badge">{{ $t('BillingPage.current') }}</span>
               <span v-if="yearlyDiscount(plan) && selectedCycle === 'yearly'" class="plan-discount">
                 -{{ yearlyDiscount(plan) }}%
               </span>
