@@ -21,11 +21,6 @@ import TermsOfUsePage from './pages/TermsOfUsePage.vue'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.vue'
 import AboutPage from './pages/AboutPage.vue'
 import FeaturesPage from './pages/FeaturesPage.vue'
-import HelpPage from './pages/HelpPage.vue'
-import QuickStartPage from './pages/QuickStartPage.vue'
-import GuidePage from './pages/GuidePage.vue'
-import FaqPage from './pages/FaqPage.vue'
-import ContactPage from './pages/ContactPage.vue'
 
 const router = createRouter({
   history: createWebHashHistory('/'),
@@ -52,11 +47,6 @@ const router = createRouter({
     { path: '/terms-of-use', name: 'terms-of-use', component: TermsOfUsePage },
     { path: '/privacy-policy', name: 'privacy-policy', component: PrivacyPolicyPage },
     { path: '/features', name: 'features', component: FeaturesPage },
-    { path: '/help', name: 'help', component: HelpPage },
-    { path: '/start', name: 'quickstart', component: QuickStartPage },
-    { path: '/guide', name: 'guide', component: GuidePage },
-    { path: '/faq', name: 'faq', component: FaqPage },
-    { path: '/contact', name: 'contact', component: ContactPage },
     { path: '/about', name: 'about', component: AboutPage },
   ],
 })
