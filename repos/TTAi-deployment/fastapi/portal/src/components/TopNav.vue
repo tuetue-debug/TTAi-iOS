@@ -9,6 +9,7 @@
     <nav class="topnav desktop-only">
       <a href="#features">{{ $t('FeaturesPage.features') }}</a>
       <a href="#pricing">{{ $t('FeaturesPage.pricing_1') || 'Pricing' }}</a>
+      <RouterLink to="/help">{{ $t('PortalLayout.help') }}</RouterLink>
     </nav>
     <div class="top-actions">
       <button class="theme-toggle-btn top-icon-btn" @click="toggleTheme" :title="themeTitle" :aria-label="themeTitle">
@@ -35,6 +36,7 @@
   <div v-if="mobileMenuOpen" class="mobile-menu-dropdown">
     <a href="#features" @click="closeMobileMenu">{{ $t('FeaturesPage.features') }}</a>
     <a href="#pricing" @click="closeMobileMenu">{{ $t('FeaturesPage.pricing_1') || 'Pricing' }}</a>
+    <RouterLink to="/help" @click="closeMobileMenu">{{ $t('PortalLayout.help') }}</RouterLink>
   </div>
 </template>
 

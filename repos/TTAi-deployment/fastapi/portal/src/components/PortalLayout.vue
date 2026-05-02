@@ -1,19 +1,34 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { logout } from '../lib/auth'
 import { getPortalOverview } from '../lib/portalData'
 import { portalSections } from '../lib/portalSections'
+import { setLocale } from '../i18n/index.js'
 import tuetueLogo from '../assets/Tuetue-ai-2m.jpg'
 
 const route = useRoute()
 const router = useRouter()
+const { locale } = useI18n()
 const loading = ref(true)
 const error = ref('')
 const overview = ref(null)
 const sidebarCollapsed = ref(false)
 const mobileMenuOpen = ref(false)
+const localeMenuOpen = ref(false)
 const theme = ref(getInitialTheme())
+
+const locales = [
+  { value: 'en', flag: '🇺🇸', code: 'EN' },
+  { value: 'vi', flag: '🇻🇳', code: 'VI' },
+  { value: 'fr', flag: '🇫🇷', code: 'FR' },
+  { value: 'zh', flag: '🇨🇳', code: 'ZH' },
+  { value: 'ko', flag: '🇰🇷', code: 'KO' },
+  { value: 'ja', flag: '🇯🇵', code: 'JA' },
+]
+
+const currentLocale = computed(() => locales.find(l => l.value === locale.value) || locales[0])
 
 function getInitialTheme() {
   const stored = localStorage.getItem('tuetue-theme')
@@ -23,7 +38,7 @@ function getInitialTheme() {
 }
 
 function applyTheme(val) {
-  document.documentElement.className = val === 'dark' ? 'theme-dark' : ''
+  document.documentElement.className = val === 'dark' ? 'theme-dark' : 'theme-light'
   document.querySelector('meta[name=theme-color]').content = val === 'dark' ? '#0f172a' : '#f6f7fb'
   theme.value = val
   localStorage.setItem('tuetue-theme', val)
@@ -78,6 +93,16 @@ function toggleSidebar() {
 
 function closeMobileMenu() {
   mobileMenuOpen.value = false
+}
+
+function toggleLocaleMenu() {
+  localeMenuOpen.value = !localeMenuOpen.value
+}
+
+async function switchLocale(value) {
+  localStorage.setItem('tuetue-locale', value)
+  localeMenuOpen.value = false
+  await setLocale(value)
 }
 
 async function handleLogout() {
@@ -143,6 +168,7 @@ async function handleLogout() {
           <span v-if="!sidebarCollapsed" class="nav-label">{{ item.label }}</span>
         </RouterLink>
       </nav>
+      <div v-if="!sidebarCollapsed" class="sidebar-version">Ver 3.2.0</div>
     </aside>
 
     <section class="dashboard-main-shell">
@@ -157,6 +183,18 @@ async function handleLogout() {
           <button class="theme-toggle-btn" @click="toggleTheme" :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
             {{ theme === 'dark' ? '☀' : '☾' }}
           </button>
+          <div class="locale-selector">
+            <button class="locale-btn" @click="toggleLocaleMenu" title="Change language">
+              <span class="locale-flag">{{ currentLocale.flag }}</span>
+              <span class="locale-code">{{ currentLocale.code }}</span>
+            </button>
+            <div v-if="localeMenuOpen" class="locale-dropdown">
+              <button v-for="loc in locales" :key="loc.value" class="locale-option" @click="switchLocale(loc.value)">
+                <span class="locale-flag">{{ loc.flag }}</span>
+                <span class="locale-code">{{ loc.code }}</span>
+              </button>
+            </div>
+          </div>
           <button class="ghost-btn top-icon-btn" @click="router.push('/dashboard')" aria-label="Go to overview">⌂</button>
           <button class="ghost-btn top-action-btn" @click="router.push('/dashboard/docs')">{{ $t('PortalLayout.docs') }}</button>
           <button class="ghost-btn top-action-btn" @click="handleLogout">{{ $t('PortalLayout.logOut') }}</button>
@@ -174,6 +212,18 @@ async function handleLogout() {
           <router-view :overview="overview" />
         </template>
       </main>
+      <footer class="site-footer dashboard-footer">
+        <span class="footer-links">
+          <router-link to="/terms-of-use">{{ $t('TermsOfUsePage.termsOfService') }}</router-link>
+          &middot;
+          <router-link to="/privacy-policy">{{ $t('TermsOfUsePage.privacyPolicy') }}</router-link>
+          &middot;
+          <router-link to="/help">{{ $t('PortalLayout.help') }}</router-link>
+          &middot;
+          <router-link to="/about">{{ $t('LandingPage.about') }}</router-link>
+        </span>
+        <span>Copyright 2026 &copy; <a href="https://minhtue.vn" target="_blank" rel="noopener">{{ $t('TermsOfUsePage.minhTueTradingInvestmentJsc') }}</a></span>
+      </footer>
     </section>
   </div>
 </template>
